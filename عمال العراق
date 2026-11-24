@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>عمّال العراق 🇮🇶</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Cairo', sans-serif;
+      background-color: #f8fafc;
+    }
+    .tab-btn.active {
+      color: #0f766e;
+      font-weight: 700;
+    }
+    .tab-btn.active .tab-icon {
+      background-color: #ccfbf1;
+      transform: translateY(-2px);
+    }
+    .tab-icon {
+      transition: all 0.2s ease;
+    }
+  </style>
+</head>
+<body class="text-slate-800 pb-24">
+
+  <!-- الشريط العلوي -->
+  <header class="bg-teal-800 text-white sticky top-0 z-30 shadow-md">
+    <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 rounded-xl bg-amber-400 text-teal-950 flex items-center justify-center font-extrabold text-lg shadow">
+          ع
+        </div>
+        <div>
+          <h1 class="font-extrabold text-base sm:text-lg leading-tight">عمّال العراق 🇮🇶</h1>
+          <p class="text-[11px] text-teal-200">منصة طلب العمال والمهنيين الموثقة</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span id="roleBadge" class="text-xs bg-teal-900/90 border border-teal-600 px-2.5 py-1 rounded-full">
+          حساب: زبون
+        </span>
+        <button onclick="switchRole()" class="text-xs bg-amber-400 hover:bg-amber-300 text-teal-950 font-bold px-3 py-1.5 rounded-lg transition cursor-pointer">
+          تبديل الدور
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- الإشعارات السريعة -->
+  <div id="toast" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 hidden bg-slate-900 text-white text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-xl border border-slate-700"></div>
+
+  <!-- المحتوى الرئيسي -->
+  <main class="max-w-4xl mx-auto px-4 pt-4">
+
+    <!-- 1. تبويب الرئيسية -->
+    <section id="view-home" class="space-y-5">
+      <!-- بطاقة الترحيب ونشر طلب -->
+      <div class="bg-gradient-to-l from-teal-900 via-teal-800 to-emerald-800 text-white rounded-2xl p-5 shadow-md">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div class="space-y-1">
+            <span class="inline-block text-[11px] bg-white/15 px-2.5 py-0.5 rounded-full">الدفع بعد الإنجاز (After Payment) + تأكيد الطرفين</span>
+            <h2 class="text-xl sm:text-2xl font-extrabold">تحتاج عامل أو مهني موثوق يمك؟</h2>
+            <p class="text-xs sm:text-sm text-teal-100 max-w-xl">
+              انشر طلبك وحدد المحافظة والمنطقة والأجر بالدينار العراقي، والعامل المختص يقبله وينفذه بكل أمان.
+            </p>
+          </div>
+          <button onclick="openOrderModal()" class="bg-amber-400 hover:bg-amber-300 text-teal-950 font-extrabold text-sm px-5 py-3 rounded-xl shadow shrink-0 transition cursor-pointer">
+            + نشر طلب عمل
+          </button>
+        </div>
+      </div>
+
+      <!-- البحث والفلترة حسب المحافظة -->
+      <div class="bg-white p-3.5 rounded-2xl shadow-sm border border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <input id="searchSpecialty" oninput="renderCategories()" type="text" placeholder="ابحث عن اختصاص (منوّم، تنظيف، كهربائي، سباك...)"
+          class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600" />
+        <select id="filterGov" onchange="renderCategories()"
+          class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 bg-white">
+          <option value="">كل محافظات العراق (18 محافظة)</option>
+        </select>
+      </div>
+
+      <!-- التخصصات الأكثر طلباً -->
+      <div>
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-extrabold text-base sm:text-lg text-slate-900">التخصصات الأكثر طلباً في العراق</h3>
+          <span id="catCount" class="text-xs text-slate-500"></span>
+        </div>
+        <div id="categoriesGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3"></div>
+      </div>
+    </section>
+
+    <!-- 2. تبويب الطلبات -->
+    <section id="view-orders" class="hidden space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 bg-white p-3.5 rounded-2xl border border-slate-100 shadow-sm">
+        <div>
+          <h2 class="font-extrabold text-lg text-slate-900">إدارة الطلبات والأعمال</h2>
+          <p class="text-xs text-slate-500">متابعة الحالات وقبول الطلبات وتأكيد الإنجاز المزدوج (الزبون + العامل)</p>
+        </div>
+        <button onclick="openOrderModal()" class="bg-teal-700 hover:bg-teal-600 text-white text-xs sm:text-sm font-bold px-4 py-2.5 rounded-xl transition cursor-pointer">
+          + طلب جديد
+        </button>
+      </div>
+
+      <!-- فلترة حالة الطلب -->
+      <div class="flex gap-2 overflow-x-auto pb-1" id="statusFilters"></div>
+
+      <!-- قائمة الطلبات -->
+      <div id="ordersList" class="space-y-3"></div>
+    </section>
+
+    <!-- 3. تبويب العمال -->
+    <section id="view-workers" class="hidden space-y-4">
+      <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 class="font-extrabold text-lg text-slate-900">سجل العمال والمهنيين</h2>
+          <p class="text-xs text-slate-500">كل عامل يمكن أن يمتلك أكثر من اختصاص ويستقبل الطلبات المناسبة له</p>
+        </div>
+        <button onclick="switchTab('account')" class="bg-amber-400 hover:bg-amber-300 text-teal-950 text-xs sm:text-sm font-bold px-4 py-2.5 rounded-xl transition cursor-pointer">
+          تسجيل حساب عامل جديد
+        </button>
+      </div>
+      <div id="workersList" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+    </section>
+
+    <!-- 4. تبويب المحفظة -->
+    <section id="view-wallet" class="hidden space-y-4">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+          <p class="text-xs text-slate-500">مستحقات العمال المحوّلة</p>
+          <p id="walletWorkerTotal" class="text-xl font-extrabold text-teal-800 mt-1">0 د.ع</p>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+          <p class="text-xs text-slate-500">عمولة التطبيق المحصلة</p>
+          <p id="walletCommissionTotal" class="text-xl font-extrabold text-amber-600 mt-1">0 د.ع</p>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+          <p class="text-xs text-slate-500">الطلبات المدفوعة بالكامل</p>
+          <p id="walletPaidCount" class="text-xl font-extrabold text-slate-800 mt-1">0 طلب</p>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-2">
+        <h3 class="font-bold text-sm text-slate-900">آلية الدفع وحماية الأموال المعتمدة</h3>
+        <p class="text-xs text-slate-600 leading-relaxed">
+          يتم التحقق من وسيلة الدفع (ماستركارد مصرفي أو زين كاش / آسيا حوالة) عند نشر الطلب دون خصم مسبق.
+          بعد إنجاز العمل وتأكيد الطرفين معاً (الزبون + العامل)، تتحول الحالة إلى <b>مدفوع</b> وتُحتسب مستحقات العامل وعمولة المنصة.
+        </p>
+      </div>
+    </section>
+
+    <!-- 5. تبويب الحساب وتسجيل العامل -->
+    <section id="view-account" class="hidden space-y-4">
+      <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+        <div class="border-b border-slate-100 pb-3">
+          <h2 class="font-extrabold text-lg text-slate-900">تسجيل / تحديث حساب عامل</h2>
+          <p class="text-xs text-slate-500">أضف بياناتك واختر أكثر من اختصاص لتظهر في قائمة العمال وتستقبل الطلبات</p>
+        </div>
+
+        <form onsubmit="registerWorker(event)" class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold mb-1">اسم العامل الكامل</label>
+              <input id="wName" required type="text" placeholder="مثال: علي حسين"
+                class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600" />
+            </div>
+            <div>
+              <label class="block text-xs font-bold mb-1">رقم الهاتف</label>
+              <input id="wPhone" required type="tel" placeholder="07700000000"
+                class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold mb-1">المحافظة</label>
+              <select id="wGov" class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-white"></select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold mb-1">المنطقة / الحي</label>
+              <input id="wArea" required type="text" placeholder="مثال: الكرادة / وسط المدينة"
+                class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold mb-2">الاختصاصات (يمكن اختيار أكثر من اختصاص)</label>
+            <div id="wSpecialtiesCheckboxes" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
+          </div>
+
+          <button type="submit" class="w-full sm:w-auto bg-teal-700 hover:bg-teal-600 text-white font-bold text-sm px-6 py-3 rounded-xl transition cursor-pointer">
+            حفظ وإضافة العامل إلى السجل
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- 6. تبويب الإدارة -->
+    <section id="view-admin" class="hidden space-y-4">
+      <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div>
+            <h2 class="font-extrabold text-lg text-slate-900">لوحة إدارة التطبيق</h2>
+            <p class="text-xs text-slate-500">ضبط نسبة العمولة، متابعة الطلبات والنزاعات، وإدارة حسابات العمال</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="text-xs font-bold">نسبة العمولة (%):</label>
+            <input id="commissionRateInput" type="number" min="0" max="50" value="10"
+              onchange="updateCommissionRate(this.value)"
+              class="w-20 px-2.5 py-1.5 text-sm font-bold border border-slate-300 rounded-lg text-center" />
+          </div>
+        </div>
+
+        <div id="adminSummary" class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- نافذة نشر طلب جديد -->
+  <div id="orderModal" class="fixed inset-0 z-50 hidden bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+      <div class="bg-teal-800 text-white px-5 py-3.5 flex items-center justify-between">
+        <h3 class="font-extrabold text-base">نشر طلب عمل جديد</h3>
+        <button onclick="closeOrderModal()" class="text-teal-100 hover:text-white text-xl leading-none cursor-pointer">&times;</button>
+      </div>
+
+      <form onsubmit="submitOrder(event)" class="p-5 space-y-3.5 overflow-y-auto text-sm">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold mb-1">اسم الزبون</label>
+            <input id="oCustomer" required type="text" placeholder="اسمك الكامل"
+              class="w-full px-3 py-2 rounded-xl border border-slate-200" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold mb-1">رقم الهاتف</label>
+            <input id="oPhone" required type="tel" placeholder="07800000000"
+              class="w-full px-3 py-2 rounded-xl border border-slate-200" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold mb-1">الاختصاص المطلوب</label>
+            <select id="oSpecialty" class="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"></select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold mb-1">المحافظة</label>
+            <select id="oGov" class="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"></select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold mb-1">المنطقة أو الحي</label>
+            <input id="oArea" required type="text" placeholder="مثال: الحسين / المنصور"
+              class="w-full px-3 py-2 rounded-xl border border-slate-200" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold mb-1">موعد حضور العامل</label>
+            <input id="oTime" required type="datetime-local"
+              class="w-full px-3 py-2 rounded-xl border border-slate-200" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold mb-1">الأجر المعروض (دينار عراقي)</label>
+            <input id="oPrice" required type="number" min="5000" step="1000" value="35000"
+              class="w-full px-3 py-2 rounded-xl border border-slate-200" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold mb-1">التحقق من وسيلة الدفع (بعد الإنجاز)</label>
+            <select id="oPaymentMethod" class="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white">
+              <option value="زين كاش (تحقق صالح)">زين كاش (تحقق صالح)</option>
+              <option value="آسيا حوالة (تحقق صالح)">آسيا حوالة (تحقق صالح)</option>
+              <option value="ماستركارد مصرفي (تحقق صالح)">ماستركارد مصرفي (تحقق صالح)</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold mb-1">تفاصيل العمل المطلوب</label>
+          <textarea id="oDetails" rows="2" required placeholder="اشرح طبيعة العمل أو المساعدة المطلوبة..."
+            class="w-full px-3 py-2 rounded-xl border border-slate-200"></textarea>
+        </div>
+
+        <div class="pt-2 flex items-center justify-end gap-2">
+          <button type="button" onclick="closeOrderModal()" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs cursor-pointer">
+            إلغاء
+          </button>
+          <button type="submit" class="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-600 text-white font-bold text-xs cursor-pointer">
+            تأكيد ونشر الطلب
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- شريط التنقل السفلي المتوازن في منتصف الشاشة -->
+  <nav class="fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-lg">
+    <div class="max-w-lg mx-auto px-2 py-1.5 flex items-center justify-between text-center">
+      <button onclick="switchTab('home')" data-tab="home" class="tab-btn active flex-1 flex flex-col items-center justify-center py-1 text-[11px] text-slate-500 cursor-pointer">
+        <span class="tab-icon w-9 h-7 rounded-xl flex items-center justify-center text-base mb-0.5">🏠</span>
+        <span>الرئيسية</span>
+      </button>
+
+      <button onclick="switchTab('orders')" data-tab="orders" class="tab-btn flex-1 flex flex-col items-center justify-center py-1 text-[11px] text-slate-500 cursor-pointer">
+        <span class="tab-icon w-9 h-7 rounded-xl flex items-center justify-center text-base mb-0.5">📋</span>
+        <span>الطلبات</span>
+      </button>
+
+      <button onclick="switchTab('workers')" data-tab="workers" class="tab-btn flex-1 flex flex-col items-center justify-center py-1 text-[11px] text-slate-500 cursor-pointer">
+        <span class="tab-icon w-9 h-7 rounded-xl flex items-center justify-center text-base mb-0.5">👷</span>
+        <span>العمال</span>
+      </button>
+
+      <button onclick="switchTab('wallet')" data-tab="wallet" class="tab-btn flex-1 flex flex-col items-center justify-center py-1 text-[11px] text-slate-500 cursor-pointer">
+        <span class="tab-icon w-9 h-7 rounded-xl flex items-center justify-center text-base mb-0.5">💳</span>
+        <span>المحفظة</span>
+      </button>
+
+      <button onclick="switchTab('account')" data-tab="account" class="tab-btn flex-1 flex flex-col items-center justify-center py-1 text-[11px] text-slate-500 cursor-pointer">
+        <span class="tab-icon w-9 h-7 rounded-xl flex items-center justify-center text-base mb-0.5">👤</span>
+        <span>حسابي</span>
+      </button>
+
+      <button onclick="switchTab('admin')" data-tab="admin" class="tab-btn flex-1 flex flex-col items-center justify-center py-1 text-[11px] text-slate-500 cursor-pointer">
+        <span class="tab-icon w-9 h-7 rounded-xl flex items-center justify-center text-base mb-0.5">⚙️</span>
+        <span>الإدارة</span>
+      </button>
+    </div>
+  </nav>
+
+  <script>
+    const GOVERNORATES = [
+      "بغداد", "البصرة", "نينوى", "أربيل", "النجف", "كربلاء",
+      "الأنبار", "ديالى", "ذي قار", "بابل", "صلاح الدين", "واسط",
+      "ميسان", "المثنى", "الديوانية", "كركوك", "دهوك", "حلبجة"
+    ];
+
+    const SPECIALTIES = [
+      { id: "caregiver", name: "منوّم ومرافق مريض", icon: "🩺", desc: "مرافقة وعناية منزلية أو بالمستشفى" },
+      { id: "cleaning", name: "تنظيف منازل", icon: "🧹", desc: "تنظيف شامل للبيوت والمكاتب" },
+      { id: "electrician", name: "كهربائي", icon: "⚡", desc: "تأسيس وصيانة كهرباء وأعطال" },
+      { id: "plumber", name: "سباك ومجاري", icon: "🔧", desc: "تسليك، أنابيب، وصحيات" },
+      { id: "ac", name: "تبريد وسبالت", icon: "❄️", desc: "غسل وصيانة ونصب سبالت" },
+      { id: "construction", name: "عمالة بناء", icon: "🧱", desc: "مساعدة بناء، تحميل، وترميم" },
+      { id: "moving", name: "نقل أثاث ومساعدة", icon: "📦", desc: "تحميل وتنزيل وترتيب أغراض" },
+      { id: "painting", name: "صباغ وديكور", icon: "🖌️", desc: "صبغ جدران، معجون، ولمسات" },
+      { id: "gardening", name: "حدائق وتشجير", icon: "🌿", desc: "تقليم، زراعة، وتنظيف حدائق" },
+      { id: "daily", name: "عامل يومي عام", icon: "🤝", desc: "مساعدة عامة حسب حاجة الزبون" }
+    ];
+
+    let state = {
+      role: "customer",
+      commissionRate: 10,
+      selectedStatus: "الكل",
+      activeWorkerId: "w1",
+      workers: [
+        {
+          id: "w1",
+          name: "حيدر الشمري",
+          phone: "07712345678",
+          gov: "بغداد",
+          area: "الكرادة",
+          specialties: ["كهربائي", "سباك ومجاري", "تبريد وسبالت"],
+          verified: true,
+          active: true
+        },
+        {
+          id: "w2",
+          name: "زينب الربيعي",
+          phone: "07809876543",
+          gov: "النجف",
+          area: "الحي العسكري",
+          specialties: ["منوّم ومرافق مريض", "تنظيف منازل"],
+          verified: true,
+          active: true
+        }
+      ],
+      orders: [
+        {
+          id: "ORD-101",
+          customer: "مصطفى الجبوري",
+          phone: "07720001122",
+          specialty: "كهربائي",
+          gov: "بغداد",
+          area: "المنصور",
+          time: "2026-11-25T10:00",
+          price: 40000,
+          paymentMethod: "زين كاش (تحقق صالح)",
+          details: "فحص قاطع كهرباء رئيسي وتبديل جوزات",
+          status: "بانتظار عامل",
+          workerId: null,
+          workerName: null,
+          customerConfirmed: false,
+          workerConfirmed: false,
+          settled: false
+        }
+      ]
+    };
+
+    function showToast(msg) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.remove("hidden");
+      clearTimeout(window.toastTimer);
+      window.toastTimer = setTimeout(() => el.classList.add("hidden"), 2800);
+    }
+
+    function formatIQD(num) {
+      return Number(num || 0).toLocaleString("en-US") + " د.ع";
+    }
+
+    function populateSelects() {
+      const filterGov = document.getElementById("filterGov");
+      const oGov = document.getElementById("oGov");
+      const wGov = document.getElementById("wGov");
+      const oSpecialty = document.getElementById("oSpecialty");
+      const wSpecs = document.getElementById("wSpecialtiesCheckboxes");
+
+      GOVERNORATES.forEach(g => {
+        filterGov.innerHTML += `<option value="${g}">${g}</option>`;
+        oGov.innerHTML += `<option value="${g}">${g}</option>`;
+        wGov.innerHTML += `<option value="${g}">${g}</option>`;
+      });
+
+      SPECIALTIES.forEach(s => {
+        oSpecialty.innerHTML += `<option value="${s.name}">${s.name}</option>`;
+        wSpecs.innerHTML += `
+          <label class="flex items-center gap-2 p-2 rounded-xl border border-slate-200 text-xs cursor-pointer hover:bg-teal-50">
+            <input type="checkbox" name="workerSpec" value="${s.name}" class="accent-teal-700" />
+            <span>${s.icon} ${s.name}</span>
+          </label>
+        `;
+      });
+    }
+
+    function switchTab(tab) {
+      ["home", "orders", "workers", "wallet", "account", "admin"].forEach(t => {
+        document.getElementById(`view-${t}`).classList.toggle("hidden", t !== tab);
+      });
+      document.querySelectorAll(".tab-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.tab === tab);
+      });
+      renderAll();
+    }
+
+    function switchRole() {
+      state.role = state.role === "customer" ? "worker" : "customer";
+      document.getElementById("roleBadge").textContent =
+        state.role === "customer" ? "حساب: زبون" : "حساب: عامل";
+      showToast(state.role === "customer" ? "تم التبديل إلى وضع الزبون" : "تم التبديل إلى وضع العامل");
+      renderOrders();
+    }
+
+    function renderCategories() {
+      const q = document.getElementById("searchSpecialty").value.trim();
+      const gov = document.getElementById("filterGov").value;
+      const grid = document.getElementById("categoriesGrid");
+
+      const filtered = SPECIALTIES.filter(s => !q || s.name.includes(q) || s.desc.includes(q));
+      document.getElementById("catCount").textContent = `${filtered.length} تخصص متاح`;
+
+      grid.innerHTML = filtered.map(s => `
+        <div onclick="openOrderModal('${s.name}', '${gov}')"
+          class="bg-white p-3.5 rounded-2xl border border-slate-100 hover:border-teal-500 shadow-xs hover:shadow-md transition cursor-pointer flex flex-col justify-between gap-2">
+          <div>
+            <div class="text-2xl mb-1.5">${s.icon}</div>
+            <h4 class="font-extrabold text-sm text-slate-900">${s.name}</h4>
+            <p class="text-[11px] text-slate-500 mt-0.5 leading-snug">${s.desc}</p>
+          </div>
+          <span class="text-[11px] font-bold text-teal-700">اطلب هذا العامل ←</span>
+        </div>
+      `).join("");
+    }
+
+    function openOrderModal(specialtyName = "", govName = "") {
+      if (specialtyName) document.getElementById("oSpecialty").value = specialtyName;
+      if (govName) document.getElementById("oGov").value = govName;
+      document.getElementById("orderModal").classList.remove("hidden");
+    }
+
+    function closeOrderModal() {
+      document.getElementById("orderModal").classList.add("hidden");
+    }
+
+    function submitOrder(e) {
+      e.preventDefault();
+      const order = {
+        id: "ORD-" + Math.floor(100 + Math.random() * 900),
+        customer: document.getElementById("oCustomer").value.trim(),
+        phone: document.getElementById("oPhone").value.trim(),
+        specialty: document.getElementById("oSpecialty").value,
+        gov: document.getElementById("oGov").value,
+        area: document.getElementById("oArea").value.trim(),
+        time: document.getElementById("oTime").value,
+        price: Number(document.getElementById("oPrice").value),
+        paymentMethod: document.getElementById("oPaymentMethod").value,
+        details: document.getElementById("oDetails").value.trim(),
+        status: "بانتظار عامل",
+        workerId: null,
+        workerName: null,
+        customerConfirmed: false,
+        workerConfirmed: false,
+        settled: false
+      };
+
+      state.orders.unshift(order);
+      closeOrderModal();
+      e.target.reset();
+      showToast("تم نشر الطلب وتحويلك إلى خانة الطلبات");
+      switchTab("orders");
+    }
+
+    function acceptOrder(orderId) {
+      const worker = state.workers.find(w => w.id === state.activeWorkerId && w.active);
+      if (!worker) {
+        showToast("يرجى تفعيل حساب عامل أولاً");
+        return;
+      }
+      const order = state.orders.find(o => o.id === orderId);
+      if (!order) return;
+
+      if (order.workerId && order.workerId !== worker.id) {
+        showToast("عذراً، تم قبول هذا الطلب من عامل آخر");
+        return;
+      }
+
+      if (!worker.specialties.includes(order.specialty)) {
+        showToast("هذا الطلب لا يطابق اختصاصات العامل الحالية");
+        return;
+      }
+
+      order.workerId = worker.id;
+      order.workerName = worker.name;
+      order.status = "مقبول";
+      showToast(`تم قبول الطلب بواسطة ${worker.name}`);
+      renderOrders();
+    }
+
+    function startWork(orderId) {
+      const order = state.orders.find(o => o.id === orderId);
+      if (order && order.status === "مقبول") {
+        order.status = "قيد التنفيذ";
+        renderOrders();
+      }
+    }
+
+    function confirmCompletion(orderId, side) {
+      const order = state.orders.find(o => o.id === orderId);
+      if (!order) return;
+
+      if (side === "customer") order.customerConfirmed = true;
+      if (side === "worker") order.workerConfirmed = true;
+
+      if (order.customerConfirmed && order.workerConfirmed) {
+        order.status = "مدفوع";
+        order.settled = true;
+        showToast("تم تأكيد الطرفين وتمت التسوية المالية بنجاح!");
+      } else {
+        order.status = "بانتظار التأكيد";
+        showToast("تم تسجيل تأكيدك، بانتظار تأكيد الطرف الآخر");
+      }
+      renderAll();
+    }
+
+    function cancelOrder(orderId) {
+      const order = state.orders.find(o => o.id === orderId);
+      if (order && !order.settled) {
+        order.status = "ملغي";
+        renderAll();
+      }
+    }
+
+    function openDispute(orderId) {
+      const order = state.orders.find(o => o.id === orderId);
+      if (order) {
+        order.status = "نزاع";
+        showToast("تم فتح نزاع وإرساله إلى الإدارة");
+        renderAll();
+      }
+    }
+
+    function renderStatusFilters() {
+      const statuses = ["الكل", "بانتظار عامل", "مقبول", "قيد التنفيذ", "بانتظار التأكيد", "مدفوع", "ملغي", "نزاع"];
+      const container = document.getElementById("statusFilters");
+      container.innerHTML = statuses.map(st => `
+        <button onclick="setStatusFilter('${st}')"
+          class="px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap cursor-pointer transition ${
+            state.selectedStatus === st
+              ? "bg-teal-800 text-white"
+              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+          }">
+          ${st}
+        </button>
+      `).join("");
+    }
+
+    function setStatusFilter(st) {
+      state.selectedStatus = st;
+      renderOrders();
+    }
+
+    function renderOrders() {
+      renderStatusFilters();
+      const list = document.getElementById("ordersList");
+      const items = state.orders.filter(o => state.selectedStatus === "الكل" || o.status === state.selectedStatus);
+
+      if (!items.length) {
+        list.innerHTML = `<div class="bg-white p-8 rounded-2xl text-center text-sm text-slate-500 border border-slate-100">لا توجد طلبات ضمن هذه الحالة حالياً.</div>`;
+        return;
+      }
+
+      list.innerHTML = items.map(o => `
+        <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <span class="text-xs font-extrabold text-teal-800">#${o.id}</span>
+              <span class="font-extrabold text-sm sm:text-base text-slate-900 mr-1">${o.specialty}</span>
+              <span class="text-xs text-slate-500">• ${o.gov} - ${o.area}</span>
+            </div>
+            <span class="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-900">${o.status}</span>
+          </div>
+
+          <p class="text-xs sm:text-sm text-slate-600">${o.details}</p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs bg-slate-50 p-3 rounded-xl">
+            <div><b>الزبون:</b> ${o.customer} (${o.phone})</div>
+            <div><b>الأجر:</b> ${formatIQD(o.price)}</div>
+            <div><b>الدفع:</b> ${o.paymentMethod}</div>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div>
+              <b>العامل المرتبط:</b>
+              ${o.workerName ? `<span class="text-teal-700 font-bold">${o.workerName}</span>` : `<span class="text-slate-400">لم يُعيّن بعد</span>`}
+              <span class="mx-2 text-slate-300">|</span>
+              <span>تأكيد الزبون: ${o.customerConfirmed ? "✅" : "⏳"}</span>
+              <span class="mx-1">•</span>
+              <span>تأكيد العامل: ${o.workerConfirmed ? "✅" : "⏳"}</span>
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+              ${!o.workerId && o.status === "بانتظار عامل" ? `
+                <button onclick="acceptOrder('${o.id}')" class="bg-teal-700 hover:bg-teal-600 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
+                  قبول الطلب
+                </button>
+              ` : ""}
+
+              ${o.status === "مقبول" ? `
+                <button onclick="startWork('${o.id}')" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
+                  بدء التنفيذ
+                </button>
+              ` : ""}
+
+              ${["مقبول", "قيد التنفيذ", "بانتظار التأكيد"].includes(o.status) ? `
+                <button onclick="confirmCompletion('${o.id}', 'customer')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
+                  تأكيد الزبون
+                </button>
+                <button onclick="confirmCompletion('${o.id}', 'worker')" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
+                  تأكيد العامل
+                </button>
+                <button onclick="openDispute('${o.id}')" class="bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold px-3 py-1.5 rounded-lg cursor-pointer">
+                  نزاع
+                </button>
+              ` : ""}
+
+              ${!o.settled && o.status !== "ملغي" ? `
+                <button onclick="cancelOrder('${o.id}')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-1.5 rounded-lg cursor-pointer">
+                  إلغاء
+                </button>
+              ` : ""}
+            </div>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function registerWorker(e) {
+      e.preventDefault();
+      const selectedSpecs = Array.from(document.querySelectorAll('input[name="workerSpec"]:checked')).map(cb => cb.value);
+      if (!selectedSpecs.length) {
+        showToast("يرجى اختيار اختصاص واحد على الأقل");
+        return;
+      }
+
+      const newWorker = {
+        id: "w" + Date.now(),
+        name: document.getElementById("wName").value.trim(),
+        phone: document.getElementById("wPhone").value.trim(),
+        gov: document.getElementById("wGov").value,
+        area: document.getElementById("wArea").value.trim(),
+        specialties: selectedSpecs,
+        verified: true,
+        active: true
+      };
+
+      state.workers.unshift(newWorker);
+      state.activeWorkerId = newWorker.id;
+      e.target.reset();
+      showToast("تم تسجيل العامل وإضافته إلى السجل");
+      switchTab("workers");
+    }
+
+    function toggleWorkerActive(id) {
+      const w = state.workers.find(x => x.id === id);
+      if (w) {
+        w.active = !w.active;
+        renderAll();
+      }
+    }
+
+    function renderWorkers() {
+      const list = document.getElementById("workersList");
+      list.innerHTML = state.workers.map(w => `
+        <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs space-y-2.5">
+          <div class="flex items-center justify-between">
+            <div>
+              <h4 class="font-extrabold text-sm text-slate-900">${w.name} ${w.verified ? '<span class="text-teal-600 text-xs">✔ موثق</span>' : ''}</h4>
+              <p class="text-xs text-slate-500">${w.gov} - ${w.area} • ${w.phone}</p>
+            </div>
+            <span class="text-xs font-bold px-2.5 py-1 rounded-full ${w.active ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">
+              ${w.active ? "نشط" : "موقوف"}
+            </span>
+          </div>
+          <div class="flex flex-wrap gap-1.5">
+            ${w.specialties.map(sp => `<span class="text-[11px] bg-teal-50 text-teal-800 px-2.5 py-1 rounded-lg font-semibold">${sp}</span>`).join("")}
+          </div>
+          <div class="pt-1 flex items-center justify-between text-xs">
+            <button onclick="state.activeWorkerId='${w.id}'; showToast('تم اختيار ${w.name} كعامل نشط للتجربة')" class="text-teal-700 font-bold hover:underline cursor-pointer">
+              تعيين كعامل نشط للتجربة
+            </button>
+            <button onclick="toggleWorkerActive('${w.id}')" class="text-slate-600 font-bold hover:underline cursor-pointer">
+              ${w.active ? "إيقاف الحساب" : "تفعيل الحساب"}
+            </button>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function renderWalletAndAdmin() {
+      const paidOrders = state.orders.filter(o => o.status === "مدفوع");
+      const grossPaid = paidOrders.reduce((sum, o) => sum + Number(o.price || 0), 0);
+      const commission = Math.round((grossPaid * state.commissionRate) / 100);
+      const workerNet = grossPaid - commission;
+
+      document.getElementById("walletWorkerTotal").textContent = formatIQD(workerNet);
+      document.getElementById("walletCommissionTotal").textContent = formatIQD(commission);
+      document.getElementById("walletPaidCount").textContent = `${paidOrders.length} طلب`;
+
+      document.getElementById("adminSummary").innerHTML = `
+        <div class="bg-slate-50 p-3 rounded-xl">
+          <div class="text-xs text-slate-500">إجمالي الطلبات</div>
+          <div class="text-lg font-extrabold text-slate-900 mt-1">${state.orders.length}</div>
+        </div>
+        <div class="bg-slate-50 p-3 rounded-xl">
+          <div class="text-xs text-slate-500">عدد العمال</div>
+          <div class="text-lg font-extrabold text-slate-900 mt-1">${state.workers.length}</div>
+        </div>
+        <div class="bg-slate-50 p-3 rounded-xl">
+          <div class="text-xs text-slate-500">النزاعات المفتوحة</div>
+          <div class="text-lg font-extrabold text-rose-700 mt-1">${state.orders.filter(o => o.status === "نزاع").length}</div>
+        </div>
+        <div class="bg-slate-50 p-3 rounded-xl">
+          <div class="text-xs text-slate-500">العمولات المحصلة</div>
+          <div class="text-lg font-extrabold text-amber-700 mt-1">${formatIQD(commission)}</div>
+        </div>
+      `;
+    }
+
+    function updateCommissionRate(val) {
+      const num = Math.max(0, Math.min(50, Number(val) || 0));
+      state.commissionRate = num;
+      document.getElementById("commissionRateInput").value = num;
+      showToast(`تم تحديث نسبة العمولة إلى ${num}%`);
+      renderWalletAndAdmin();
+    }
+
+    function renderAll() {
+      renderCategories();
+      renderOrders();
+      renderWorkers();
+      renderWalletAndAdmin();
+    }
+
+    populateSelects();
+    renderAll();
+  </script>
+</body>
+</html>
