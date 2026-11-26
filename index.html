@@ -181,7 +181,6 @@
 
     <!-- 5. تبويب الحساب وتسجيل العامل + حساب السحابة -->
     <section id="view-account" class="hidden space-y-4 animate-fade">
-      <!-- بطاقة حساب السحابة والمزامنة -->
       <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-3">
         <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
           <div>
@@ -219,7 +218,6 @@
         </div>
       </div>
 
-      <!-- نموذج تسجيل / تحديث حساب عامل -->
       <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-4">
         <div class="border-b border-slate-100 pb-3">
           <h2 class="font-extrabold text-lg text-slate-900">تسجيل / تحديث حساب عامل</h2>
@@ -452,10 +450,9 @@
   </nav>
 
   <script>
-    // ضع بيانات مشروعك من Supabase هنا عند التفعيل السحابي (لا تضع مفاتيح سرية هنا)
     const SUPABASE_CONFIG = {
-      url: "",
-      anonKey: "",
+      url: "https://iprkevhpfunqtfhxubot.supabase.co",
+      anonKey: "sb_publishable_2w0ZhTbVxKuUEhB-VW2Uvg_xWaZ5uZz",
       bucket: "attachments",
       maxFileBytes: 5 * 1024 * 1024,
       allowedMimeTypes: ["image/jpeg", "image/png", "image/webp", "application/pdf"]
@@ -675,479 +672,495 @@
       if (!dtStr) return "غير محدد";
       const d = new Date(dtStr);
       if (Number.isNaN(d.getTime())) return escapeHTML(dtStr);
-      return d.toLocaleString("ar-IQ", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit"
-      });
+      return d.toLocaleString("ar-IQ", { dateStyle: "medium", timeStyle: "short" });
     }
 
-    function generateUniqueOrderId() {
-      const existing = new Set(state.orders.map(o => o.id));
-      let id = "ORD-" + Date.now().toString().slice(-5);
-      while (existing.has(id)) {
-        id = "ORD-" + Math.floor(10000 + Math.random() * 90000);
-      }
-      return id;
+    function updateNetworkBanner() {
+      const banner = document.getElementById("networkBanner");
+      if (!banner) return;
+      banner.classList.toggle("hidden", navigator.onLine);
     }
 
-    function validateAttachmentFile(file) {
-      if (!file) return { ok: true, file: null };
-      if (!SUPABASE_CONFIG.allowedMimeTypes.includes(file.type)) {
-        return { ok: false, error: "نوع الملف غير مدعوم. المسموح: JPG, PNG, WEBP, PDF" };
-      }
-      if (file.size > SUPABASE_CONFIG.maxFileBytes) {
-        return { ok: false, error: "حجم الملف يتجاوز الحد الأقصى المسموح (5 ميجابايت)" };
-      }
-      return { ok: true, file };
-    }
-
-    async function uploadAttachmentToCloud(file, folder) {
-      if (!file) return "";
-      if (!isCloudConfigured() || !cloudUser) {
-        showToast("المرفق يُحفظ محلياً فقط حتى تسجيل الدخول إلى Supabase");
-        return "";
-      }
-      const cleanName = String(file.name || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
-      const path = `${cloudUser.id}/${folder}/${Date.now()}_${cleanName}`;
-      const { error } = await supabaseClient.storage
-        .from(SUPABASE_CONFIG.bucket)
-        .upload(path, file, { contentType: file.type, upsert: false });
-      if (error) throw error;
-      return path;
-    }
-
-    async function downloadAttachment(path) {
-      if (!path) return;
-      if (!isCloudConfigured() || !cloudUser) {
-        showToast("يلزم تسجيل الدخول السحابي لاسترجاع الملفات المخزنة");
-        return;
-      }
-      try {
-        const { data, error } = await supabaseClient.storage
-          .from(SUPABASE_CONFIG.bucket)
-          .createSignedUrl(path, 60);
-        if (error || !data || !data.signedUrl) throw error || new Error("تعذر إنشاء رابط التحميل");
-        window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-      } catch (err) {
-        recordErrorLog("downloadAttachment", err);
-        showToast("تعذر فتح أو تحميل الملف المرفق");
-      }
-    }
-
-    async function pushWorkerToCloud(worker) {
-      if (!isCloudConfigured() || !cloudUser) return;
-      if (navigator.onLine === false) {
-        enqueueOperation("upsertWorker", worker);
-        return;
-      }
-      const { error } = await supabaseClient.from("workers").upsert({
-        id: worker.id,
-        user_id: cloudUser.id,
-        name: worker.name,
-        phone: worker.phone,
-        gov: worker.gov,
-        area: worker.area,
-        specialties: worker.specialties,
-        doc_path: worker.docPath || null,
-        verified: Boolean(worker.verified),
-        active: Boolean(worker.active)
-      });
-      if (error) {
-        enqueueOperation("upsertWorker", worker);
-        throw error;
-      }
-    }
-
-    async function pushOrderToCloud(order) {
-      if (!isCloudConfigured() || !cloudUser) return;
-      if (navigator.onLine === false) {
-        enqueueOperation("upsertOrder", order);
-        return;
-      }
-      const { error } = await supabaseClient.from("orders").upsert({
-        id: order.id,
-        customer_id: order.customerId || cloudUser.id,
-        worker_user_id: order.workerUserId || null,
-        worker_id: order.workerId || null,
-        worker_name: order.workerName || null,
-        customer: order.customer,
-        phone: order.phone,
-        specialty: order.specialty,
-        gov: order.gov,
-        area: order.area,
-        scheduled_time: order.time,
-        price: Number(order.price),
-        payment_method: order.paymentMethod,
-        details: order.details,
-        attachment_path: order.attachmentPath || null,
-        status: order.status,
-        customer_confirmed: Boolean(order.customerConfirmed),
-        worker_confirmed: Boolean(order.workerConfirmed),
-        settled: Boolean(order.settled)
-      });
-      if (error) {
-        enqueueOperation("upsertOrder", order);
-        throw error;
-      }
-    }
-
-    async function flushPendingQueue() {
-      if (!isCloudConfigured() || !cloudUser || navigator.onLine === false || isSyncing) return;
-      if (!state.pendingQueue.length) return;
-
-      isSyncing = true;
-      const remaining = [];
-      for (const item of state.pendingQueue) {
-        try {
-          if (item.type === "upsertOrder") {
-            await pushOrderToCloud(item.payload);
-          } else if (item.type === "upsertWorker") {
-            await pushWorkerToCloud(item.payload);
-          } else if (item.type === "commissionRate" && state.role === "admin") {
-            const { error } = await supabaseClient
-              .from("app_settings")
-              .update({ commission_rate: item.payload.rate, updated_at: new Date().toISOString() })
-              .eq("id", 1);
-            if (error) throw error;
-          }
-        } catch (err) {
-          remaining.push(item);
-        }
-      }
-      state.pendingQueue = remaining;
-      saveState();
-      isSyncing = false;
-    }
-
-    async function syncCloudData(showFeedback = false) {
-      if (!isCloudConfigured()) {
-        if (showFeedback) showToast("أضف بيانات Supabase أولاً لتفعيل المزامنة السحابية");
-        return;
-      }
-      if (navigator.onLine === false) {
-        if (showFeedback) showToast("لا يوجد اتصال بالإنترنت حالياً");
-        return;
-      }
-
-      try {
-        await flushPendingQueue();
-
-        const [ordersRes, workersRes, settingsRes] = await Promise.all([
-          supabaseClient.from("orders").select("*").order("created_at", { ascending: false }),
-          supabaseClient.from("workers").select("*").order("created_at", { ascending: false }),
-          supabaseClient.from("app_settings").select("commission_rate").eq("id", 1).maybeSingle()
-        ]);
-
-        if (ordersRes.error) throw ordersRes.error;
-        if (workersRes.error) throw workersRes.error;
-
-        if (Array.isArray(workersRes.data) && workersRes.data.length) {
-          state.workers = workersRes.data.map(w => ({
-            id: w.id,
-            userId: w.user_id,
-            name: w.name,
-            phone: w.phone,
-            gov: w.gov,
-            area: w.area,
-            specialties: Array.isArray(w.specialties) ? w.specialties : [],
-            docPath: w.doc_path || "",
-            verified: Boolean(w.verified),
-            active: Boolean(w.active)
-          }));
-        }
-
-        if (Array.isArray(ordersRes.data) && ordersRes.data.length) {
-          state.orders = ordersRes.data.map(o => ({
-            id: o.id,
-            customerId: o.customer_id,
-            workerUserId: o.worker_user_id,
-            customer: o.customer,
-            phone: o.phone,
-            specialty: o.specialty,
-            gov: o.gov,
-            area: o.area,
-            time: o.scheduled_time,
-            price: Number(o.price),
-            paymentMethod: o.payment_method,
-            details: o.details,
-            attachmentPath: o.attachment_path || "",
-            status: o.status,
-            workerId: o.worker_id,
-            workerName: o.worker_name,
-            customerConfirmed: Boolean(o.customer_confirmed),
-            workerConfirmed: Boolean(o.worker_confirmed),
-            settled: Boolean(o.settled)
-          }));
-        }
-
-        if (settingsRes.data && Number.isFinite(Number(settingsRes.data.commission_rate))) {
-          state.commissionRate = Number(settingsRes.data.commission_rate);
-        }
-
-        saveState();
-        renderAll();
-        if (showFeedback) showToast("تمت مزامنة البيانات مع السحابة بنجاح");
-      } catch (err) {
-        recordErrorLog("syncCloudData", err);
-        if (showFeedback) showToast("تعذر إتمام المزامنة السحابية الآن");
-      }
-    }
-
-    async function initCloudAuth() {
-      const subEl = document.getElementById("cloudStatusSub");
-      if (!isCloudConfigured()) {
-        subEl.textContent = "وضع محلي (أضف بيانات Supabase للمزامنة السحابية)";
-        updateAuthUI();
-        return;
-      }
-
-      supabaseClient = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
-      subEl.textContent = "متصل بـ Supabase";
-
-      const { data } = await supabaseClient.auth.getSession();
-      cloudUser = data && data.session ? data.session.user : null;
-      await syncProfileRole();
-      updateAuthUI();
-      if (cloudUser) await syncCloudData(false);
-
-      supabaseClient.auth.onAuthStateChange(async (_event, session) => {
-        cloudUser = session ? session.user : null;
-        await syncProfileRole();
-        updateAuthUI();
-        if (cloudUser) await syncCloudData(false);
-      });
-    }
-
-    async function syncProfileRole() {
-      if (!supabaseClient || !cloudUser) return;
-      try {
-        const { data } = await supabaseClient
-          .from("profiles")
-          .select("role")
-          .eq("id", cloudUser.id)
-          .maybeSingle();
-        if (data && VALID_ROLES.includes(data.role)) {
-          state.role = data.role;
-          saveState();
-          updateRoleUI();
-        }
-      } catch (e) {
-        // يُبقي الدور المحلي عند تعذر القراءة
-      }
-    }
-
-    function updateAuthUI() {
+    function updateCloudStatusUI() {
+      const sub = document.getElementById("cloudStatusSub");
       const info = document.getElementById("authUserInfo");
       const loggedOutBox = document.getElementById("authLoggedOutBox");
       const loggedInBox = document.getElementById("authLoggedInBox");
-      updatePendingQueueUI();
 
       if (!isCloudConfigured()) {
-        info.textContent = "لم يتم إدخال إعدادات Supabase بعد — يعمل التطبيق محلياً دون انقطاع.";
-        loggedOutBox.classList.remove("hidden");
-        loggedInBox.classList.add("hidden");
+        if (sub) sub.textContent = "وضع محلي (أضف بيانات Supabase للمزامنة السحابية)";
+        if (info) info.textContent = "لم يتم ضبط مفاتيح Supabase بعد — البيانات محفوظة محلياً.";
+        if (loggedOutBox) loggedOutBox.classList.remove("hidden");
+        if (loggedInBox) loggedInBox.classList.add("hidden");
         return;
       }
 
       if (cloudUser) {
-        info.textContent = `مسجّل الدخول: ${cloudUser.email || cloudUser.id}`;
-        loggedOutBox.classList.add("hidden");
-        loggedInBox.classList.remove("hidden");
+        if (sub) sub.textContent = "متصل بـ Supabase • مزامنة سحابية نشطة";
+        if (info) info.textContent = `الحساب السحابي: ${cloudUser.email || cloudUser.id}`;
+        if (loggedOutBox) loggedOutBox.classList.add("hidden");
+        if (loggedInBox) loggedInBox.classList.remove("hidden");
       } else {
-        info.textContent = "غير مسجّل دخول — سجّل الدخول لمزامنة بياناتك عبر الأجهزة وحماية الملفات.";
-        loggedOutBox.classList.remove("hidden");
-        loggedInBox.classList.add("hidden");
+        if (sub) sub.textContent = "متصل بـ Supabase • سجّل دخولك للمزامنة";
+        if (info) info.textContent = "غير مسجّل دخول سحابياً — سجّل دخولك أو أنشئ حساباً لمزامنة بياناتك.";
+        if (loggedOutBox) loggedOutBox.classList.remove("hidden");
+        if (loggedInBox) loggedInBox.classList.add("hidden");
+      }
+      updatePendingQueueUI();
+    }
+
+    async function ensureUserProfile(user, preferredRole) {
+      if (!supabaseClient || !user) return;
+      const { data: existing, error: selErr } = await supabaseClient
+        .from("profiles")
+        .select("id, full_name, phone, role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (selErr) throw selErr;
+
+      if (!existing) {
+        const safeRole = ["customer", "worker"].includes(preferredRole) ? preferredRole : "customer";
+        const { error: insErr } = await supabaseClient
+          .from("profiles")
+          .insert({
+            id: user.id,
+            full_name: (user.email || "مستخدم").split("@")[0],
+            phone: null,
+            role: safeRole
+          });
+        if (insErr) throw insErr;
+        state.role = safeRole;
+      } else if (VALID_ROLES.includes(existing.role)) {
+        state.role = existing.role;
+      }
+      saveState();
+    }
+
+    async function initSupabase() {
+      if (!isCloudConfigured()) {
+        updateCloudStatusUI();
+        return;
+      }
+      try {
+        supabaseClient = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+        const { data, error } = await supabaseClient.auth.getSession();
+        if (error) throw error;
+        cloudUser = data.session ? data.session.user : null;
+        if (cloudUser) {
+          await ensureUserProfile(cloudUser);
+          await syncCloudData(false);
+        }
+        updateCloudStatusUI();
+        renderAll();
+
+        supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+          cloudUser = session ? session.user : null;
+          if (cloudUser) {
+            try {
+              await ensureUserProfile(cloudUser);
+              await syncCloudData(false);
+            } catch (err) {
+              recordErrorLog("authStateChange", err);
+            }
+          }
+          updateCloudStatusUI();
+          renderAll();
+        });
+      } catch (err) {
+        recordErrorLog("initSupabase", err);
+        updateCloudStatusUI();
       }
     }
 
     async function signInCloud() {
-      if (!isCloudConfigured()) {
-        showToast("أضف SUPABASE_URL و SUPABASE_ANON_KEY أولاً");
-        return;
+      if (!isCloudConfigured() || !supabaseClient) {
+        return showToast("أضف بيانات Supabase أولاً");
       }
       const email = document.getElementById("authEmail").value.trim();
       const password = document.getElementById("authPassword").value;
       if (!email || password.length < 6) {
-        showToast("أدخل البريد الإلكتروني وكلمة مرور (6 أحرف فأكثر)");
-        return;
+        return showToast("أدخل بريداً إلكترونياً وكلمة مرور (6 أحرف فأكثر)");
       }
-      const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-      if (error) {
-        recordErrorLog("signInCloud", error);
-        showToast("تعذر تسجيل الدخول، تحقق من البيانات");
-        return;
+      try {
+        const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        cloudUser = data.user;
+        await ensureUserProfile(cloudUser);
+        await syncCloudData(false);
+        updateCloudStatusUI();
+        renderAll();
+        showToast("تم تسجيل الدخول السحابي بنجاح");
+      } catch (err) {
+        recordErrorLog("signInCloud", err);
+        showToast("تعذر تسجيل الدخول: " + sanitizeErrorMessage(err.message));
       }
-      showToast("تم تسجيل الدخول السحابي بنجاح");
     }
 
     async function signUpCloud() {
-      if (!isCloudConfigured()) {
-        showToast("أضف SUPABASE_URL و SUPABASE_ANON_KEY أولاً");
-        return;
+      if (!isCloudConfigured() || !supabaseClient) {
+        return showToast("أضف بيانات Supabase أولاً");
       }
       const email = document.getElementById("authEmail").value.trim();
       const password = document.getElementById("authPassword").value;
       if (!email || password.length < 6) {
-        showToast("أدخل البريد الإلكتروني وكلمة مرور (6 أحرف فأكثر)");
-        return;
+        return showToast("أدخل بريداً إلكترونياً وكلمة مرور (6 أحرف فأكثر)");
       }
-      const { data, error } = await supabaseClient.auth.signUp({ email, password });
-      if (error) {
-        recordErrorLog("signUpCloud", error);
-        showToast("تعذر إنشاء الحساب السحابي");
-        return;
+      try {
+        const chosenRole = state.role === "worker" ? "worker" : "customer";
+        const { data, error } = await supabaseClient.auth.signUp({ email, password });
+        if (error) throw error;
+        cloudUser = data.user;
+        if (data.session && cloudUser) {
+          await ensureUserProfile(cloudUser, chosenRole);
+          await syncCloudData(false);
+          showToast("تم إنشاء الحساب وتسجيل الدخول بنجاح");
+        } else {
+          showToast("تم إرسال رابط تأكيد البريد الإلكتروني، فعّله ثم سجّل دخولك");
+        }
+        updateCloudStatusUI();
+        renderAll();
+      } catch (err) {
+        recordErrorLog("signUpCloud", err);
+        showToast("تعذر إنشاء الحساب: " + sanitizeErrorMessage(err.message));
       }
-      if (data && data.user) {
-        await supabaseClient.from("profiles").upsert({
-          id: data.user.id,
-          full_name: email.split("@")[0],
-          role: state.role === "admin" ? "customer" : state.role
-        });
-      }
-      showToast("تم إنشاء الحساب؛ تحقق من بريدك إذا طُلب تأكيد الحساب");
     }
 
     async function signOutCloud() {
       if (!supabaseClient) return;
-      await supabaseClient.auth.signOut();
-      showToast("تم تسجيل الخروج السحابي");
+      try {
+        await supabaseClient.auth.signOut();
+        cloudUser = null;
+        updateCloudStatusUI();
+        renderAll();
+        showToast("تم تسجيل الخروج من الحساب السحابي");
+      } catch (err) {
+        recordErrorLog("signOutCloud", err);
+      }
     }
 
-    function populateSelects() {
-      const govOptions = GOVERNORATES.map(g => `<option value="${escapeHTML(g)}">${escapeHTML(g)}</option>`).join("");
-      document.getElementById("filterGov").insertAdjacentHTML("beforeend", govOptions);
-      document.getElementById("oGov").innerHTML = govOptions;
-      document.getElementById("wGov").innerHTML = govOptions;
-
-      document.getElementById("oSpecialty").innerHTML = SPECIALTIES
-        .map(s => `<option value="${escapeHTML(s.name)}">${escapeHTML(s.name)}</option>`)
-        .join("");
-
-      document.getElementById("wSpecialtiesCheckboxes").innerHTML = SPECIALTIES
-        .map(s => `
-          <label class="flex items-center gap-2 p-2 rounded-xl border border-slate-200 text-xs cursor-pointer hover:bg-teal-50">
-            <input type="checkbox" name="workerSpec" value="${escapeHTML(s.name)}" class="accent-teal-700" />
-            <span>${s.icon} ${escapeHTML(s.name)}</span>
-          </label>
-        `).join("");
-    }
-
-    function updateRoleUI() {
-      const labels = {
-        customer: "حساب: زبون",
-        worker: "حساب: عامل",
-        admin: "حساب: إدارة"
+    function mapOrderRowToState(row) {
+      return {
+        id: row.id,
+        customer: row.customer,
+        phone: row.phone,
+        specialty: row.specialty,
+        gov: row.gov,
+        area: row.area,
+        time: row.scheduled_time,
+        price: Number(row.price),
+        paymentMethod: row.payment_method,
+        details: row.details,
+        attachmentPath: row.attachment_path || "",
+        status: row.status,
+        workerId: row.worker_id || null,
+        workerName: row.worker_name || null,
+        customerConfirmed: Boolean(row.customer_confirmed),
+        workerConfirmed: Boolean(row.worker_confirmed),
+        settled: Boolean(row.settled)
       };
-      document.getElementById("roleBadge").textContent = labels[state.role] || "حساب: زبون";
     }
 
-    function switchTab(tab) {
-      if (!VALID_TABS.includes(tab)) return;
-      if (tab === "admin" && state.role !== "admin") {
-        showToast("للوصول إلى لوحة الإدارة، بدّل الدور إلى (إدارة) من الأعلى");
+    function mapWorkerRowToState(row) {
+      return {
+        id: row.id,
+        name: row.name,
+        phone: row.phone,
+        gov: row.gov,
+        area: row.area,
+        specialties: Array.isArray(row.specialties) ? row.specialties : [],
+        docPath: row.doc_path || "",
+        verified: Boolean(row.verified),
+        active: Boolean(row.active)
+      };
+    }
+
+    async function pushQueuedOperations() {
+      if (!supabaseClient || !cloudUser || !Array.isArray(state.pendingQueue) || state.pendingQueue.length === 0) {
         return;
       }
-      state.activeTab = tab;
+      const remaining = [];
+      for (const op of state.pendingQueue) {
+        try {
+          if (op.type === "upsert_worker") {
+            const w = op.payload;
+            const { error } = await supabaseClient.from("workers").upsert({
+              id: w.id,
+              user_id: cloudUser.id,
+              name: w.name,
+              phone: w.phone,
+              gov: w.gov,
+              area: w.area,
+              specialties: w.specialties,
+              doc_path: w.docPath || null,
+              verified: w.verified !== false,
+              active: w.active !== false
+            });
+            if (error) throw error;
+          } else if (op.type === "insert_order") {
+            const o = op.payload;
+            const { error } = await supabaseClient.from("orders").insert({
+              id: o.id,
+              customer_id: cloudUser.id,
+              worker_user_id: null,
+              worker_id: null,
+              worker_name: null,
+              customer: o.customer,
+              phone: o.phone,
+              specialty: o.specialty,
+              gov: o.gov,
+              area: o.area,
+              scheduled_time: o.time,
+              price: o.price,
+              payment_method: o.paymentMethod,
+              details: o.details,
+              attachment_path: o.attachmentPath || null,
+              status: o.status,
+              customer_confirmed: false,
+              worker_confirmed: false,
+              settled: false
+            });
+            if (error) throw error;
+          } else if (op.type === "update_order") {
+            const o = op.payload;
+            const patch = {
+              status: o.status,
+              worker_id: o.workerId,
+              worker_name: o.workerName,
+              customer_confirmed: o.customerConfirmed,
+              worker_confirmed: o.workerConfirmed,
+              settled: o.settled
+            };
+            if (o.status === "قيد التنفيذ" && cloudUser) {
+              patch.worker_user_id = cloudUser.id;
+            }
+            const { error } = await supabaseClient.from("orders").update(patch).eq("id", o.id);
+            if (error) throw error;
+          } else if (op.type === "update_commission") {
+            const { error } = await supabaseClient
+              .from("app_settings")
+              .update({ commission_rate: op.payload.commissionRate, updated_at: new Date().toISOString() })
+              .eq("id", 1);
+            if (error) throw error;
+          }
+        } catch (err) {
+          recordErrorLog("pushQueuedOperations:" + op.type, err);
+          remaining.push(op);
+        }
+      }
+      state.pendingQueue = remaining;
+      saveState();
+    }
+
+    async function syncCloudData(showFeedback = false) {
+      if (!isCloudConfigured() || !supabaseClient || isSyncing) return;
+      if (!cloudUser) {
+        if (showFeedback) showToast("سجّل دخولك أولاً لمزامنة البيانات السحابية");
+        return;
+      }
+      if (!navigator.onLine) {
+        if (showFeedback) showToast("أنت غير متصل بالإنترنت — ستتم المزامنة تلقائياً عند الاتصال");
+        return;
+      }
+
+      isSyncing = true;
+      try {
+        await pushQueuedOperations();
+
+        const [{ data: settingsData }, { data: workersData, error: wErr }, { data: ordersData, error: oErr }] = await Promise.all([
+          supabaseClient.from("app_settings").select("commission_rate").eq("id", 1).maybeSingle(),
+          supabaseClient.from("workers").select("*").order("created_at", { ascending: false }),
+          supabaseClient.from("orders").select("*").order("created_at", { ascending: false })
+        ]);
+
+        if (wErr) throw wErr;
+        if (oErr) throw oErr;
+
+        if (settingsData && Number.isFinite(Number(settingsData.commission_rate))) {
+          state.commissionRate = Number(settingsData.commission_rate);
+        }
+        if (Array.isArray(workersData) && workersData.length > 0) {
+          state.workers = workersData.map(mapWorkerRowToState);
+        }
+        if (Array.isArray(ordersData)) {
+          state.orders = ordersData.map(mapOrderRowToState);
+        }
+
+        saveState();
+        renderAll();
+        if (showFeedback) showToast("تمت مزامنة البيانات مع Supabase");
+      } catch (err) {
+        recordErrorLog("syncCloudData", err);
+        if (showFeedback) showToast("تعذرت المزامنة حالياً، البيانات محفوظة محلياً");
+      } finally {
+        isSyncing = false;
+      }
+    }
+
+    async function uploadAttachmentFile(file, folderName) {
+      if (!file) return "";
+      if (!SUPABASE_CONFIG.allowedMimeTypes.includes(file.type)) {
+        throw new Error("نوع الملف غير مسموح (المسموح: JPG, PNG, WEBP, PDF)");
+      }
+      if (file.size > SUPABASE_CONFIG.maxFileBytes) {
+        throw new Error("حجم الملف يتجاوز الحد الأقصى المسموح (5MB)");
+      }
+      if (!isCloudConfigured() || !supabaseClient || !cloudUser) {
+        return `local-only/${file.name}`;
+      }
+
+      const ext = (file.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const safeName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext || "bin"}`;
+      const objectPath = `${cloudUser.id}/${folderName}/${safeName}`;
+
+      const { error } = await supabaseClient.storage
+        .from(SUPABASE_CONFIG.bucket)
+        .upload(objectPath, file, { contentType: file.type, upsert: false });
+
+      if (error) throw error;
+      return objectPath;
+    }
+
+    async function openAttachment(path) {
+      if (!path) return;
+      if (path.startsWith("local-only/")) {
+        return showToast("الملف مختار محلياً (سجّل دخولاً سحابياً لرفع الملفات إلى Storage)");
+      }
+      if (!isCloudConfigured() || !supabaseClient || !cloudUser) {
+        return showToast("سجّل دخولك سحابياً لعرض المرفق");
+      }
+      try {
+        const { data, error } = await supabaseClient.storage
+          .from(SUPABASE_CONFIG.bucket)
+          .createSignedUrl(path, 120);
+        if (error) throw error;
+        window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+      } catch (err) {
+        recordErrorLog("openAttachment", err);
+        showToast("تعذر فتح المرفق");
+      }
+    }
+
+    function initSelectors() {
+      const filterGov = document.getElementById("filterGov");
+      const oGov = document.getElementById("oGov");
+      const wGov = document.getElementById("wGov");
+
+      GOVERNORATES.forEach(gov => {
+        filterGov.add(new Option(gov, gov));
+        oGov.add(new Option(gov, gov));
+        wGov.add(new Option(gov, gov));
+      });
+
+      const oSpec = document.getElementById("oSpecialty");
+      const wBox = document.getElementById("wSpecialtiesCheckboxes");
+      wBox.innerHTML = "";
+
+      SPECIALTIES.forEach(sp => {
+        oSpec.add(new Option(sp.name, sp.name));
+        const label = document.createElement("label");
+        label.className = "flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 hover:bg-teal-50/60 cursor-pointer text-xs";
+        label.innerHTML = `<input type="checkbox" name="wSpec" value="${escapeHTML(sp.name)}" class="rounded text-teal-700" /><span>${escapeHTML(sp.icon)} ${escapeHTML(sp.name)}</span>`;
+        wBox.appendChild(label);
+      });
+
+      const dtInput = document.getElementById("oTime");
+      const now = new Date(Date.now() + 60 * 60 * 1000);
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      dtInput.value = now.toISOString().slice(0, 16);
+    }
+
+    function switchTab(tabName) {
+      if (!VALID_TABS.includes(tabName)) return;
+      if (tabName === "admin" && state.role !== "admin") {
+        showToast("تبويب الإدارة متاح فقط عند التبديل إلى دور: إدارة");
+        tabName = "home";
+      }
+
+      state.activeTab = tabName;
       saveState();
 
-      VALID_TABS.forEach(t => {
-        document.getElementById(`view-${t}`).classList.toggle("hidden", t !== tab);
-      });
+      document.querySelectorAll("main > section").forEach(sec => sec.classList.add("hidden"));
+      document.getElementById("view-" + tabName).classList.remove("hidden");
+
       document.querySelectorAll(".tab-btn").forEach(btn => {
-        btn.classList.toggle("active", btn.dataset.tab === tab);
+        btn.classList.toggle("active", btn.dataset.tab === tabName);
       });
 
-      if (tab === "home") renderCategories();
-      if (tab === "orders") renderOrders();
-      if (tab === "workers") renderWorkers();
-      if (tab === "wallet" || tab === "admin") renderWalletAndAdmin();
-      if (tab === "account") updateAuthUI();
+      renderAll();
     }
 
     function switchRole() {
-      const next = VALID_ROLES[(VALID_ROLES.indexOf(state.role) + 1) % VALID_ROLES.length];
-      state.role = next;
-      saveState();
-      updateRoleUI();
-
-      const msgMap = {
-        customer: "تم التبديل إلى وضع الزبون",
-        worker: "تم التبديل إلى وضع العامل",
-        admin: "تم التبديل إلى وضع الإدارة"
-      };
-      showToast(msgMap[next]);
-
-      if (state.activeTab === "admin" && next !== "admin") {
-        switchTab("home");
-      } else if (state.activeTab === "orders") {
-        renderOrders();
-      } else if (state.activeTab === "admin") {
-        renderWalletAndAdmin();
+      const idx = VALID_ROLES.indexOf(state.role);
+      state.role = VALID_ROLES[(idx + 1) % VALID_ROLES.length];
+      if (state.role !== "admin" && state.activeTab === "admin") {
+        state.activeTab = "home";
+        document.querySelectorAll("main > section").forEach(sec => sec.classList.add("hidden"));
+        document.getElementById("view-home").classList.remove("hidden");
+        document.querySelectorAll(".tab-btn").forEach(btn => {
+          btn.classList.toggle("active", btn.dataset.tab === "home");
+        });
       }
+      saveState();
+      renderRoleBadge();
+      renderAll();
+      const labels = { customer: "زبون", worker: "عامل", admin: "إدارة" };
+      showToast("تم التبديل إلى حساب: " + labels[state.role]);
+    }
+
+    function renderRoleBadge() {
+      const labels = { customer: "زبون", worker: "عامل", admin: "إدارة" };
+      document.getElementById("roleBadge").textContent = "حساب: " + labels[state.role];
     }
 
     function renderCategories() {
-      const q = document.getElementById("searchSpecialty").value.trim();
+      const q = document.getElementById("searchSpecialty").value.trim().toLowerCase();
       const gov = document.getElementById("filterGov").value;
-      const grid = document.getElementById("categoriesGrid");
       const hint = document.getElementById("govAvailabilityHint");
+      const grid = document.getElementById("categoriesGrid");
 
-      const activeWorkersInGov = gov
+      const matchingWorkers = gov
         ? state.workers.filter(w => w.active && w.gov === gov)
         : state.workers.filter(w => w.active);
 
       if (gov) {
         hint.classList.remove("hidden");
-        hint.textContent = `المحافظة المختارة: ${gov} — عدد العمال النشطين المسجلين فيها: ${activeWorkersInGov.length} عامل. عند الضغط على أي تخصص سيتم تحديد ${gov} تلقائياً.`;
+        hint.textContent = `المحافظة المختارة: ${gov} — العمال النشطون المسجلون: ${matchingWorkers.length}`;
       } else {
         hint.classList.add("hidden");
       }
 
-      const filtered = SPECIALTIES.filter(s => !q || s.name.includes(q) || s.desc.includes(q));
-      document.getElementById("catCount").textContent = `${filtered.length} تخصص متاح`;
+      const filtered = SPECIALTIES.filter(sp =>
+        sp.name.toLowerCase().includes(q) || sp.desc.toLowerCase().includes(q)
+      );
 
-      if (!filtered.length) {
-        grid.innerHTML = `<div class="col-span-full bg-white p-6 rounded-2xl text-center text-xs sm:text-sm text-slate-500 border border-slate-100">لا توجد تخصصات مطابقة لبحثك حالياً.</div>`;
-        return;
-      }
+      document.getElementById("catCount").textContent = `${filtered.length} تخصص`;
+      grid.innerHTML = "";
 
-      grid.innerHTML = filtered.map(s => {
-        const specWorkersCount = activeWorkersInGov.filter(w => w.specialties.includes(s.name)).length;
-        return `
-          <button type="button" onclick="openOrderModal('${escapeHTML(s.name)}', '${escapeHTML(gov)}')"
-            class="text-right bg-white p-3.5 rounded-2xl border border-slate-100 hover:border-teal-500 shadow-xs hover:shadow-md transition cursor-pointer flex flex-col justify-between gap-2">
-            <div>
-              <div class="flex items-center justify-between mb-1.5">
-                <span class="text-2xl">${s.icon}</span>
-                <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-bold">
-                  ${specWorkersCount} عامل
-                </span>
-              </div>
-              <h4 class="font-extrabold text-sm text-slate-900">${escapeHTML(s.name)}</h4>
-              <p class="text-[11px] text-slate-500 mt-0.5 leading-snug">${escapeHTML(s.desc)}</p>
-            </div>
-            <span class="text-[11px] font-bold text-teal-700">اطلب هذا العامل ←</span>
-          </button>
+      filtered.forEach(sp => {
+        const countInScope = matchingWorkers.filter(w => w.specialties.includes(sp.name)).length;
+        const card = document.createElement("button");
+        card.type = "button";
+        card.onclick = () => openOrderModal(sp.name, gov);
+        card.className = "bg-white hover:border-teal-600 border border-slate-200 rounded-2xl p-3.5 text-right shadow-2xs transition flex flex-col justify-between gap-2 cursor-pointer";
+        card.innerHTML = `
+          <div>
+            <div class="text-2xl mb-1.5">${escapeHTML(sp.icon)}</div>
+            <div class="font-extrabold text-xs sm:text-sm text-slate-900">${escapeHTML(sp.name)}</div>
+            <div class="text-[11px] text-slate-500 mt-0.5 line-clamp-2">${escapeHTML(sp.desc)}</div>
+          </div>
+          <div class="text-[11px] font-bold text-teal-700 bg-teal-50 px-2 py-1 rounded-lg inline-block self-start">
+            ${countInScope} عامل متاح
+          </div>
         `;
-      }).join("");
+        grid.appendChild(card);
+      });
     }
 
-    function openOrderModal(specialtyName = "", govName = "") {
-      if (specialtyName) document.getElementById("oSpecialty").value = specialtyName;
-      if (govName) document.getElementById("oGov").value = govName;
-
-      const timeInput = document.getElementById("oTime");
-      if (!timeInput.value) {
-        const soon = new Date(Date.now() + 2 * 60 * 60 * 1000);
-        const tzOffset = soon.getTimezoneOffset() * 60000;
-        timeInput.value = new Date(soon - tzOffset).toISOString().slice(0, 16);
-      }
-
+    function openOrderModal(defaultSpecialty = "", defaultGov = "") {
+      if (defaultSpecialty) document.getElementById("oSpecialty").value = defaultSpecialty;
+      if (defaultGov) document.getElementById("oGov").value = defaultGov;
       document.getElementById("orderModal").classList.remove("hidden");
-      document.getElementById("oCustomer").focus();
     }
 
     function closeOrderModal() {
@@ -1156,615 +1169,416 @@
 
     async function submitOrder(e) {
       e.preventDefault();
+      const customer = document.getElementById("oCustomer").value.trim();
+      const phone = document.getElementById("oPhone").value.trim();
+      const specialty = document.getElementById("oSpecialty").value;
+      const gov = document.getElementById("oGov").value;
+      const area = document.getElementById("oArea").value.trim();
+      const time = document.getElementById("oTime").value;
+      const price = Number(document.getElementById("oPrice").value);
+      const paymentMethod = document.getElementById("oPaymentMethod").value;
+      const details = document.getElementById("oDetails").value.trim();
+      const fileInput = document.getElementById("oAttachment");
+      const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+
+      if (!customer || customer.length < 3) return showToast("أدخل اسم الزبون بشكل صحيح");
+      if (!IRAQI_PHONE_REGEX.test(phone)) return showToast("أدخل رقم هاتف عراقي صحيح (11 رقماً يبدأ بـ 07)");
+      if (!area || area.length < 2) return showToast("أدخل المنطقة أو الحي");
+      if (!Number.isFinite(price) || price < 5000 || price > 10000000) return showToast("الأجر يجب أن يكون بين 5,000 و 10,000,000 د.ع");
+      if (!details || details.length < 5) return showToast("أدخل تفاصيل واضحة للعمل المطلوب");
+
+      let attachmentPath = "";
       try {
-        const customer = document.getElementById("oCustomer").value.trim();
-        const phone = document.getElementById("oPhone").value.trim();
-        const area = document.getElementById("oArea").value.trim();
-        const details = document.getElementById("oDetails").value.trim();
-        const price = Number(document.getElementById("oPrice").value);
-        const fileInput = document.getElementById("oAttachment");
-        const fileCheck = validateAttachmentFile(fileInput.files && fileInput.files[0]);
-
-        if (customer.length < 3 || area.length < 2 || details.length < 5) {
-          showToast("يرجى ملء جميع الحقول النصية ببيانات واضحة");
-          return;
-        }
-        if (!IRAQI_PHONE_REGEX.test(phone)) {
-          showToast("يرجى إدخال رقم هاتف عراقي صحيح (11 رقماً يبدأ بـ 07)");
-          return;
-        }
-        if (!Number.isFinite(price) || price < 5000 || price > 10000000) {
-          showToast("يرجى إدخال أجر صحيح بين 5,000 و 10,000,000 د.ع");
-          return;
-        }
-        if (!fileCheck.ok) {
-          showToast(fileCheck.error);
-          return;
-        }
-
-        const attachmentPath = fileCheck.file ? await uploadAttachmentToCloud(fileCheck.file, "orders") : "";
-
-        const order = {
-          id: generateUniqueOrderId(),
-          customerId: cloudUser ? cloudUser.id : null,
-          workerUserId: null,
-          customer,
-          phone,
-          specialty: document.getElementById("oSpecialty").value,
-          gov: document.getElementById("oGov").value,
-          area,
-          time: document.getElementById("oTime").value,
-          price,
-          paymentMethod: document.getElementById("oPaymentMethod").value,
-          details,
-          attachmentPath,
-          status: "بانتظار عامل",
-          workerId: null,
-          workerName: null,
-          customerConfirmed: false,
-          workerConfirmed: false,
-          settled: false
-        };
-
-        state.orders.unshift(order);
-        saveState();
-        closeOrderModal();
-        e.target.reset();
-        showToast("تم نشر الطلب وحفظه بنجاح");
-        switchTab("orders");
-
-        if (isCloudConfigured() && cloudUser) {
-          await pushOrderToCloud(order).catch(err => {
-            recordErrorLog("pushOrderToCloud", err);
-            showToast("تم حفظ الطلب محلياً وسيُزامن عند توفر الاتصال");
-          });
+        if (file) {
+          attachmentPath = await uploadAttachmentFile(file, "orders");
         }
       } catch (err) {
-        recordErrorLog("submitOrder", err);
-        showToast("حدث خطأ أثناء نشر الطلب");
+        recordErrorLog("uploadOrderAttachment", err);
+        return showToast(err.message || "تعذر رفع المرفق");
+      }
+
+      const newOrder = {
+        id: "ORD-" + Math.floor(1000 + Math.random() * 9000),
+        customer,
+        phone,
+        specialty,
+        gov,
+        area,
+        time,
+        price,
+        paymentMethod,
+        details,
+        attachmentPath,
+        status: "بانتظار عامل",
+        workerId: null,
+        workerName: null,
+        customerConfirmed: false,
+        workerConfirmed: false,
+        settled: false
+      };
+
+      state.orders.unshift(newOrder);
+      enqueueOperation("insert_order", newOrder);
+      saveState();
+      closeOrderModal();
+      e.target.reset();
+      initSelectors();
+      switchTab("orders");
+      showToast("تم نشر الطلب بنجاح وحفظه");
+
+      if (isCloudConfigured() && cloudUser && navigator.onLine) {
+        await syncCloudData(false);
+      }
+    }
+
+    function getStatusBadge(status) {
+      const map = {
+        "بانتظار عامل": "bg-amber-100 text-amber-900 border-amber-200",
+        "قيد التنفيذ": "bg-sky-100 text-sky-900 border-sky-200",
+        "بانتظار تأكيد الطرفين": "bg-purple-100 text-purple-900 border-purple-200",
+        "مدفوع": "bg-emerald-100 text-emerald-900 border-emerald-200",
+        "ملغي": "bg-rose-100 text-rose-900 border-rose-200"
+      };
+      return map[status] || "bg-slate-100 text-slate-800 border-slate-200";
+    }
+
+    function renderOrders() {
+      const statuses = ["الكل", "بانتظار عامل", "قيد التنفيذ", "بانتظار تأكيد الطرفين", "مدفوع", "ملغي"];
+      const filtersEl = document.getElementById("statusFilters");
+      filtersEl.innerHTML = "";
+
+      statuses.forEach(st => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        const active = state.selectedStatus === st;
+        btn.className = `px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap border transition cursor-pointer ${
+          active ? "bg-teal-800 text-white border-teal-800" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+        }`;
+        btn.textContent = st;
+        btn.onclick = () => {
+          state.selectedStatus = st;
+          saveState();
+          renderOrders();
+        };
+        filtersEl.appendChild(btn);
+      });
+
+      const listEl = document.getElementById("ordersList");
+      const items = state.orders.filter(o => state.selectedStatus === "الكل" || o.status === state.selectedStatus);
+
+      if (items.length === 0) {
+        listEl.innerHTML = `<div class="bg-white p-8 rounded-2xl border border-slate-100 text-center text-sm text-slate-500">لا توجد طلبات ضمن هذا التصنيف حالياً.</div>`;
+        return;
+      }
+
+      listEl.innerHTML = "";
+      items.forEach(order => {
+        const card = document.createElement("div");
+        card.className = "bg-white p-4 rounded-2xl border border-slate-100 shadow-2xs space-y-3";
+
+        const actions = [];
+        if (order.status === "بانتظار عامل" && (state.role === "worker" || state.role === "admin")) {
+          actions.push(`<button type="button" onclick="acceptOrder('${escapeHTML(order.id)}')" class="px-3 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold cursor-pointer">قبول الطلب</button>`);
+        }
+        if (order.status === "قيد التنفيذ" && (state.role === "worker" || state.role === "admin")) {
+          actions.push(`<button type="button" onclick="markWorkCompleted('${escapeHTML(order.id)}')" class="px-3 py-1.5 rounded-xl bg-sky-700 hover:bg-sky-600 text-white text-xs font-bold cursor-pointer">إتمام العمل وطلب التأكيد</button>`);
+        }
+        if ((order.status === "قيد التنفيذ" || order.status === "بانتظار تأكيد الطرفين") && !order.workerConfirmed && (state.role === "worker" || state.role === "admin")) {
+          actions.push(`<button type="button" onclick="confirmCompletion('${escapeHTML(order.id)}', 'worker')" class="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-teal-950 text-xs font-bold cursor-pointer">تأكيد إنجاز العامل</button>`);
+        }
+        if ((order.status === "قيد التنفيذ" || order.status === "بانتظار تأكيد الطرفين") && !order.customerConfirmed && (state.role === "customer" || state.role === "admin")) {
+          actions.push(`<button type="button" onclick="confirmCompletion('${escapeHTML(order.id)}', 'customer')" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer">تأكيد الاستلام والدفع (الزبون)</button>`);
+        }
+        if (order.status === "بانتظار عامل" && (state.role === "customer" || state.role === "admin")) {
+          actions.push(`<button type="button" onclick="cancelOrder('${escapeHTML(order.id)}')" class="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold cursor-pointer">إلغاء الطلب</button>`);
+        }
+
+        const attachmentBtn = order.attachmentPath
+          ? `<button type="button" onclick="openAttachment('${escapeHTML(order.attachmentPath)}')" class="text-xs font-bold text-teal-700 underline cursor-pointer">عرض المرفق</button>`
+          : "";
+
+        card.innerHTML = `
+          <div class="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-extrabold text-sm text-slate-900">${escapeHTML(order.specialty)}</span>
+                <span class="text-xs text-slate-400">#${escapeHTML(order.id)}</span>
+                <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${getStatusBadge(order.status)}">${escapeHTML(order.status)}</span>
+              </div>
+              <p class="text-xs text-slate-500 mt-1">${escapeHTML(order.gov)} — ${escapeHTML(order.area)} • الموعد: ${formatDateTime(order.time)}</p>
+            </div>
+            <div class="text-left">
+              <div class="font-extrabold text-sm text-teal-800">${formatIQD(order.price)}</div>
+              <div class="text-[11px] text-slate-500">${escapeHTML(order.paymentMethod)}</div>
+            </div>
+          </div>
+
+          <p class="text-xs sm:text-sm text-slate-700 bg-slate-50 p-2.5 rounded-xl">${escapeHTML(order.details)}</p>
+
+          <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 border-t border-slate-100 pt-2.5">
+            <div class="space-y-0.5">
+              <div>الزبون: <b>${escapeHTML(order.customer)}</b> (${escapeHTML(order.phone)})</div>
+              <div>العامل: <b>${order.workerName ? escapeHTML(order.workerName) : "لم يُعيّن بعد"}</b></div>
+              <div>تأكيد الطرفين: زبون (${order.customerConfirmed ? "✔" : "⏳"}) • عامل (${order.workerConfirmed ? "✔" : "⏳"}) ${attachmentBtn ? "• " + attachmentBtn : ""}</div>
+            </div>
+            <div class="flex flex-wrap gap-2">${actions.join("")}</div>
+          </div>
+        `;
+        listEl.appendChild(card);
+      });
+    }
+
+    async function persistOrderChange(order) {
+      enqueueOperation("update_order", order);
+      saveState();
+      renderAll();
+      if (isCloudConfigured() && cloudUser && navigator.onLine) {
+        await syncCloudData(false);
       }
     }
 
     async function acceptOrder(orderId) {
-      if (state.role !== "worker") {
-        showToast("يجب التبديل إلى حساب (عامل) لقبول الطلبات");
-        return;
-      }
-      const worker = state.workers.find(w => w.id === state.activeWorkerId && w.active);
-      if (!worker) {
-        showToast("يرجى تفعيل حساب عامل نشط أولاً من تبويب العمال");
-        return;
-      }
       const order = state.orders.find(o => o.id === orderId);
-      if (!order || order.status !== "بانتظار عامل") {
-        showToast("هذا الطلب لم يعد متاحاً للقبول");
-        return;
-      }
-      if (!worker.specialties.includes(order.specialty)) {
-        showToast(`اختصاصات ${worker.name} لا تشمل (${order.specialty})`);
-        return;
-      }
-
-      order.workerId = worker.id;
-      order.workerName = worker.name;
-      order.workerUserId = cloudUser ? cloudUser.id : (worker.userId || null);
-      order.status = "مقبول";
-      saveState();
-      showToast(`تم قبول الطلب بواسطة ${worker.name}`);
-      renderOrders();
-
-      if (isCloudConfigured() && cloudUser) {
-        await pushOrderToCloud(order).catch(err => recordErrorLog("acceptOrder.sync", err));
-      }
+      if (!order || order.status !== "بانتظار عامل") return;
+      const worker = state.workers.find(w => w.id === state.activeWorkerId) || state.workers[0];
+      order.status = "قيد التنفيذ";
+      order.workerId = worker ? worker.id : "w-demo";
+      order.workerName = worker ? worker.name : "عامل معتمد";
+      showToast("تم قبول الطلب وبدء التنفيذ");
+      await persistOrderChange(order);
     }
 
-    async function startWork(orderId) {
-      if (state.role !== "worker") {
-        showToast("العامل فقط يمكنه بدء تنفيذ الطلب");
-        return;
-      }
+    async function markWorkCompleted(orderId) {
       const order = state.orders.find(o => o.id === orderId);
-      if (!order || order.status !== "مقبول") {
-        showToast("لا يمكن بدء التنفيذ في هذه الحالة");
-        return;
-      }
-      order.status = "قيد التنفيذ";
-      saveState();
-      showToast("تم تحديث حالة الطلب إلى: قيد التنفيذ");
-      renderOrders();
-
-      if (isCloudConfigured() && cloudUser) {
-        await pushOrderToCloud(order).catch(err => recordErrorLog("startWork.sync", err));
-      }
+      if (!order || order.status !== "قيد التنفيذ") return;
+      order.workerConfirmed = true;
+      order.status = order.customerConfirmed ? "مدفوع" : "بانتظار تأكيد الطرفين";
+      if (order.status === "مدفوع") order.settled = true;
+      showToast("تم تسجيل إتمام العمل وبانتظار تأكيد الزبون");
+      await persistOrderChange(order);
     }
 
     async function confirmCompletion(orderId, side) {
-      if (state.role !== side) {
-        showToast(side === "customer" ? "هذا الإجراء مخصص للزبون فقط" : "هذا الإجراء مخصص للعامل فقط");
-        return;
-      }
-
       const order = state.orders.find(o => o.id === orderId);
       if (!order) return;
+      if (side === "worker") order.workerConfirmed = true;
+      if (side === "customer") order.customerConfirmed = true;
 
-      if (!["قيد التنفيذ", "بانتظار التأكيد"].includes(order.status)) {
-        showToast("لا يمكن تأكيد الإنجاز إلا بعد بدء تنفيذ العمل");
-        return;
-      }
-
-      if (side === "customer") {
-        if (order.customerConfirmed) {
-          showToast("تم تسجيل تأكيد الزبون مسبقاً");
-          return;
-        }
-        order.customerConfirmed = true;
-      }
-
-      if (side === "worker") {
-        if (order.workerConfirmed) {
-          showToast("تم تسجيل تأكيد العامل مسبقاً");
-          return;
-        }
-        order.workerConfirmed = true;
-      }
-
-      if (order.customerConfirmed && order.workerConfirmed) {
+      if (order.workerConfirmed && order.customerConfirmed) {
         order.status = "مدفوع";
         order.settled = true;
-        showToast("تم تأكيد الطرفين وتمت التسوية المالية بنجاح!");
+        showToast("تم تأكيد الطرفين وتحويل الحالة إلى: مدفوع");
       } else {
-        order.status = "بانتظار التأكيد";
+        order.status = "بانتظار تأكيد الطرفين";
         showToast("تم تسجيل تأكيدك، بانتظار تأكيد الطرف الآخر");
       }
-
-      saveState();
-      renderOrders();
-      renderWalletAndAdmin();
-
-      if (isCloudConfigured() && cloudUser) {
-        await pushOrderToCloud(order).catch(err => recordErrorLog("confirmCompletion.sync", err));
-      }
+      await persistOrderChange(order);
     }
 
     async function cancelOrder(orderId) {
       const order = state.orders.find(o => o.id === orderId);
-      if (!order) return;
-      if (order.settled || order.status === "مدفوع" || order.status === "ملغي") {
-        showToast("لا يمكن إلغاء هذا الطلب في حالته الحالية");
-        return;
-      }
+      if (!order || order.status !== "بانتظار عامل") return;
       order.status = "ملغي";
-      saveState();
       showToast("تم إلغاء الطلب");
-      renderOrders();
-      renderWalletAndAdmin();
-
-      if (isCloudConfigured() && cloudUser) {
-        await pushOrderToCloud(order).catch(err => recordErrorLog("cancelOrder.sync", err));
-      }
-    }
-
-    async function openDispute(orderId) {
-      const order = state.orders.find(o => o.id === orderId);
-      if (!order || !["مقبول", "قيد التنفيذ", "بانتظار التأكيد"].includes(order.status)) {
-        showToast("لا يمكن فتح نزاع على هذا الطلب حالياً");
-        return;
-      }
-      order.status = "نزاع";
-      saveState();
-      showToast("تم فتح نزاع وإرساله إلى الإدارة");
-      renderOrders();
-      renderWalletAndAdmin();
-
-      if (isCloudConfigured() && cloudUser) {
-        await pushOrderToCloud(order).catch(err => recordErrorLog("openDispute.sync", err));
-      }
-    }
-
-    async function resolveDispute(orderId, resolution) {
-      if (state.role !== "admin") {
-        showToast("هذا الإجراء مخصص للإدارة فقط");
-        return;
-      }
-      const order = state.orders.find(o => o.id === orderId);
-      if (!order || order.status !== "نزاع") return;
-
-      if (resolution === "pay") {
-        order.customerConfirmed = true;
-        order.workerConfirmed = true;
-        order.status = "مدفوع";
-        order.settled = true;
-        showToast("تمت تسوية النزاع لصالح إتمام الدفع");
-      } else {
-        order.status = "ملغي";
-        showToast("تم إغلاق النزاع وإلغاء الطلب");
-      }
-      saveState();
-      renderOrders();
-      renderWalletAndAdmin();
-
-      if (isCloudConfigured() && cloudUser) {
-        await pushOrderToCloud(order).catch(err => recordErrorLog("resolveDispute.sync", err));
-      }
-    }
-
-    function renderStatusFilters() {
-      const statuses = ["الكل", "بانتظار عامل", "مقبول", "قيد التنفيذ", "بانتظار التأكيد", "مدفوع", "ملغي", "نزاع"];
-      const container = document.getElementById("statusFilters");
-      container.innerHTML = statuses.map(st => `
-        <button type="button" onclick="setStatusFilter('${escapeHTML(st)}')"
-          class="px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap cursor-pointer transition ${
-            state.selectedStatus === st
-              ? "bg-teal-800 text-white"
-              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-          }">
-          ${escapeHTML(st)}
-        </button>
-      `).join("");
-    }
-
-    function setStatusFilter(st) {
-      state.selectedStatus = st;
-      saveState();
-      renderOrders();
-    }
-
-    function renderOrders() {
-      renderStatusFilters();
-      const list = document.getElementById("ordersList");
-      const items = state.orders.filter(o => state.selectedStatus === "الكل" || o.status === state.selectedStatus);
-
-      if (!items.length) {
-        list.innerHTML = `<div class="bg-white p-8 rounded-2xl text-center text-sm text-slate-500 border border-slate-100">لا توجد طلبات ضمن هذه الحالة حالياً.</div>`;
-        return;
-      }
-
-      list.innerHTML = items.map(o => `
-        <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs space-y-3">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <span class="text-xs font-extrabold text-teal-800">#${escapeHTML(o.id)}</span>
-              <span class="font-extrabold text-sm sm:text-base text-slate-900 mr-1">${escapeHTML(o.specialty)}</span>
-              <span class="text-xs text-slate-500">• ${escapeHTML(o.gov)} - ${escapeHTML(o.area)}</span>
-            </div>
-            <span class="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-900">${escapeHTML(o.status)}</span>
-          </div>
-
-          <p class="text-xs sm:text-sm text-slate-600">${escapeHTML(o.details)}</p>
-
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs bg-slate-50 p-3 rounded-xl">
-            <div><b>الزبون:</b> ${escapeHTML(o.customer)} (${escapeHTML(o.phone)})</div>
-            <div><b>الموعد:</b> ${formatDateTime(o.time)}</div>
-            <div><b>الأجر:</b> ${formatIQD(o.price)}</div>
-            <div><b>الدفع:</b> ${escapeHTML(o.paymentMethod)}</div>
-          </div>
-
-          ${o.attachmentPath ? `
-            <div class="text-xs">
-              <button type="button" onclick="downloadAttachment('${escapeHTML(o.attachmentPath)}')"
-                class="text-teal-700 font-bold hover:underline cursor-pointer">
-                📎 عرض / تحميل الملف المرفق
-              </button>
-            </div>
-          ` : ""}
-
-          <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
-            <div>
-              <b>العامل المرتبط:</b>
-              ${o.workerName ? `<span class="text-teal-700 font-bold">${escapeHTML(o.workerName)}</span>` : `<span class="text-slate-400">لم يُعيّن بعد</span>`}
-              <span class="mx-2 text-slate-300">|</span>
-              <span>تأكيد الزبون: ${o.customerConfirmed ? "✅" : "⏳"}</span>
-              <span class="mx-1">•</span>
-              <span>تأكيد العامل: ${o.workerConfirmed ? "✅" : "⏳"}</span>
-            </div>
-
-            <div class="flex flex-wrap gap-2">
-              ${state.role === "worker" && !o.workerId && o.status === "بانتظار عامل" ? `
-                <button type="button" onclick="acceptOrder('${escapeHTML(o.id)}')" class="bg-teal-700 hover:bg-teal-600 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
-                  قبول الطلب
-                </button>
-              ` : ""}
-
-              ${state.role === "worker" && o.status === "مقبول" ? `
-                <button type="button" onclick="startWork('${escapeHTML(o.id)}')" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
-                  بدء التنفيذ
-                </button>
-              ` : ""}
-
-              ${state.role === "customer" && ["قيد التنفيذ", "بانتظار التأكيد"].includes(o.status) && !o.customerConfirmed ? `
-                <button type="button" onclick="confirmCompletion('${escapeHTML(o.id)}', 'customer')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
-                  تأكيد الإنجاز (الزبون)
-                </button>
-              ` : ""}
-
-              ${state.role === "worker" && ["قيد التنفيذ", "بانتظار التأكيد"].includes(o.status) && !o.workerConfirmed ? `
-                <button type="button" onclick="confirmCompletion('${escapeHTML(o.id)}', 'worker')" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
-                  تأكيد الإنجاز (العامل)
-                </button>
-              ` : ""}
-
-              ${["مقبول", "قيد التنفيذ", "بانتظار التأكيد"].includes(o.status) ? `
-                <button type="button" onclick="openDispute('${escapeHTML(o.id)}')" class="bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold px-3 py-1.5 rounded-lg cursor-pointer">
-                  نزاع
-                </button>
-              ` : ""}
-
-              ${state.role === "admin" && o.status === "نزاع" ? `
-                <button type="button" onclick="resolveDispute('${escapeHTML(o.id)}', 'pay')" class="bg-emerald-700 hover:bg-emerald-600 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
-                  حسم النزاع ودفع
-                </button>
-                <button type="button" onclick="resolveDispute('${escapeHTML(o.id)}', 'cancel')" class="bg-rose-700 hover:bg-rose-600 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
-                  إلغاء الطلب
-                </button>
-              ` : ""}
-
-              ${!o.settled && o.status !== "ملغي" && o.status !== "مدفوع" ? `
-                <button type="button" onclick="cancelOrder('${escapeHTML(o.id)}')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-1.5 rounded-lg cursor-pointer">
-                  إلغاء
-                </button>
-              ` : ""}
-            </div>
-          </div>
-        </div>
-      `).join("");
+      await persistOrderChange(order);
     }
 
     async function registerWorker(e) {
       e.preventDefault();
+      const name = document.getElementById("wName").value.trim();
+      const phone = document.getElementById("wPhone").value.trim();
+      const gov = document.getElementById("wGov").value;
+      const area = document.getElementById("wArea").value.trim();
+      const specs = Array.from(document.querySelectorAll('input[name="wSpec"]:checked')).map(cb => cb.value);
+      const docInput = document.getElementById("wDocFile");
+      const docFile = docInput && docInput.files ? docInput.files[0] : null;
+
+      if (!name || name.length < 3) return showToast("أدخل اسم العامل بشكل صحيح");
+      if (!IRAQI_PHONE_REGEX.test(phone)) return showToast("أدخل رقم هاتف عراقي صحيح (11 رقماً يبدأ بـ 07)");
+      if (!area || area.length < 2) return showToast("أدخل المنطقة أو الحي");
+      if (specs.length === 0) return showToast("اختر اختصاصاً واحداً على الأقل للعامل");
+
+      let docPath = "";
       try {
-        const name = document.getElementById("wName").value.trim();
-        const phone = document.getElementById("wPhone").value.trim();
-        const area = document.getElementById("wArea").value.trim();
-        const selectedSpecs = Array.from(document.querySelectorAll('input[name="workerSpec"]:checked')).map(cb => cb.value);
-        const docInput = document.getElementById("wDocFile");
-        const docCheck = validateAttachmentFile(docInput.files && docInput.files[0]);
-
-        if (name.length < 3 || area.length < 2) {
-          showToast("يرجى إدخال اسم العامل والمنطقة بشكل صحيح");
-          return;
-        }
-        if (!IRAQI_PHONE_REGEX.test(phone)) {
-          showToast("يرجى إدخال رقم هاتف عراقي صحيح (11 رقماً يبدأ بـ 07)");
-          return;
-        }
-        if (!selectedSpecs.length) {
-          showToast("يرجى اختيار اختصاص واحد على الأقل");
-          return;
-        }
-        if (!docCheck.ok) {
-          showToast(docCheck.error);
-          return;
-        }
-
-        const docPath = docCheck.file ? await uploadAttachmentToCloud(docCheck.file, "workers") : "";
-
-        const newWorker = {
-          id: "w" + Date.now(),
-          userId: cloudUser ? cloudUser.id : null,
-          name,
-          phone,
-          gov: document.getElementById("wGov").value,
-          area,
-          specialties: selectedSpecs,
-          docPath,
-          verified: true,
-          active: true
-        };
-
-        state.workers.unshift(newWorker);
-        state.activeWorkerId = newWorker.id;
-        saveState();
-        e.target.reset();
-        showToast("تم تسجيل العامل وحفظه في السجل");
-        switchTab("workers");
-
-        if (isCloudConfigured() && cloudUser) {
-          await pushWorkerToCloud(newWorker).catch(err => {
-            recordErrorLog("pushWorkerToCloud", err);
-            showToast("تم حفظ العامل محلياً وسيُزامن عند توفر الاتصال");
-          });
+        if (docFile) {
+          docPath = await uploadAttachmentFile(docFile, "workers");
         }
       } catch (err) {
-        recordErrorLog("registerWorker", err);
-        showToast("حدث خطأ أثناء تسجيل حساب العامل");
+        recordErrorLog("uploadWorkerDoc", err);
+        return showToast(err.message || "تعذر رفع ملف التوثيق");
       }
-    }
 
-    function setActiveWorker(id) {
-      state.activeWorkerId = id;
+      const newWorker = {
+        id: "W-" + Math.floor(100 + Math.random() * 900),
+        name,
+        phone,
+        gov,
+        area,
+        specialties: specs,
+        docPath,
+        verified: true,
+        active: true
+      };
+
+      state.workers.unshift(newWorker);
+      state.activeWorkerId = newWorker.id;
+      enqueueOperation("upsert_worker", newWorker);
       saveState();
-      const w = state.workers.find(x => x.id === id);
-      if (w) showToast(`تم اختيار ${w.name} كعامل نشط`);
-      renderWorkers();
-    }
+      e.target.reset();
+      switchTab("workers");
+      showToast("تم تسجيل العامل وإضافته إلى السجل");
 
-    async function toggleWorkerActive(id) {
-      const w = state.workers.find(x => x.id === id);
-      if (w) {
-        w.active = !w.active;
-        saveState();
-        renderWorkers();
-        renderCategories();
-        if (isCloudConfigured() && cloudUser) {
-          await pushWorkerToCloud(w).catch(err => recordErrorLog("toggleWorkerActive.sync", err));
-        }
+      if (isCloudConfigured() && cloudUser && navigator.onLine) {
+        await syncCloudData(false);
       }
     }
 
     function renderWorkers() {
       const list = document.getElementById("workersList");
-      if (!state.workers.length) {
-        list.innerHTML = `<div class="col-span-full bg-white p-8 rounded-2xl text-center text-sm text-slate-500 border border-slate-100">لا يوجد عمال مسجلون حالياً.</div>`;
-        return;
-      }
+      list.innerHTML = "";
 
-      list.innerHTML = state.workers.map(w => {
+      state.workers.forEach(w => {
         const isSelected = state.activeWorkerId === w.id;
-        return `
-          <div class="bg-white p-4 rounded-2xl border ${isSelected ? 'border-teal-500 ring-1 ring-teal-500/30' : 'border-slate-100'} shadow-xs space-y-2.5">
-            <div class="flex items-center justify-between">
-              <div>
-                <h4 class="font-extrabold text-sm text-slate-900">
-                  ${escapeHTML(w.name)}
-                  ${w.verified ? '<span class="text-teal-600 text-xs">✔ موثق</span>' : ''}
-                  ${isSelected ? '<span class="text-[10px] bg-teal-100 text-teal-800 px-2 py-0.5 rounded-full mr-1">النشط حالياً</span>' : ''}
-                </h4>
-                <p class="text-xs text-slate-500">${escapeHTML(w.gov)} - ${escapeHTML(w.area)} • ${escapeHTML(w.phone)}</p>
+        const docBtn = w.docPath
+          ? `<button type="button" onclick="openAttachment('${escapeHTML(w.docPath)}')" class="text-[11px] font-bold text-teal-700 underline cursor-pointer">ملف التوثيق</button>`
+          : "";
+        const card = document.createElement("div");
+        card.className = `bg-white p-4 rounded-2xl border shadow-2xs space-y-2.5 ${
+          isSelected ? "border-teal-600 ring-1 ring-teal-600/30" : "border-slate-100"
+        }`;
+        card.innerHTML = `
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <h3 class="font-extrabold text-sm text-slate-900">${escapeHTML(w.name)}</h3>
+                ${w.verified ? '<span class="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">موثّق</span>' : ""}
               </div>
-              <span class="text-xs font-bold px-2.5 py-1 rounded-full ${w.active ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">
-                ${w.active ? "نشط" : "موقوف"}
-              </span>
+              <p class="text-xs text-slate-500 mt-0.5">${escapeHTML(w.gov)} — ${escapeHTML(w.area)} • ${escapeHTML(w.phone)}</p>
             </div>
-            <div class="flex flex-wrap gap-1.5">
-              ${w.specialties.map(sp => `<span class="text-[11px] bg-teal-50 text-teal-800 px-2.5 py-1 rounded-lg font-semibold">${escapeHTML(sp)}</span>`).join("")}
-            </div>
-            ${w.docPath ? `
-              <div class="text-xs">
-                <button type="button" onclick="downloadAttachment('${escapeHTML(w.docPath)}')"
-                  class="text-teal-700 font-bold hover:underline cursor-pointer">
-                  📄 عرض وثيقة العامل
-                </button>
-              </div>
-            ` : ""}
-            <div class="pt-1 flex items-center justify-between text-xs">
-              <button type="button" onclick="setActiveWorker('${escapeHTML(w.id)}')" class="text-teal-700 font-bold hover:underline cursor-pointer">
-                ${isSelected ? "العامل المختار للتنفيذ" : "تعيين كعامل نشط"}
-              </button>
-              <button type="button" onclick="toggleWorkerActive('${escapeHTML(w.id)}')" class="text-slate-600 font-bold hover:underline cursor-pointer">
-                ${w.active ? "إيقاف الحساب" : "تفعيل الحساب"}
-              </button>
-            </div>
+            <button type="button" onclick="selectActiveWorker('${escapeHTML(w.id)}')"
+              class="text-[11px] font-bold px-2.5 py-1 rounded-lg cursor-pointer ${
+                isSelected ? "bg-teal-800 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+              }">
+              ${isSelected ? "العامل النشط" : "اختيار كعامل نشط"}
+            </button>
+          </div>
+          <div class="flex flex-wrap gap-1.5 items-center">
+            ${w.specialties.map(s => `<span class="text-[11px] bg-teal-50 text-teal-800 px-2.5 py-0.5 rounded-full font-semibold">${escapeHTML(s)}</span>`).join("")}
+            ${docBtn}
           </div>
         `;
-      }).join("");
+        list.appendChild(card);
+      });
+    }
+
+    function selectActiveWorker(id) {
+      state.activeWorkerId = id;
+      saveState();
+      renderWorkers();
+      showToast("تم تحديد العامل النشط لاستقبال الطلبات");
+    }
+
+    function renderWallet() {
+      const paidOrders = state.orders.filter(o => o.status === "مدفوع" || o.settled);
+      const totalVolume = paidOrders.reduce((sum, o) => sum + Number(o.price || 0), 0);
+      const commission = Math.round((totalVolume * state.commissionRate) / 100);
+      const workerNet = totalVolume - commission;
+
+      document.getElementById("walletWorkerTotal").textContent = formatIQD(workerNet);
+      document.getElementById("walletCommissionTotal").textContent = formatIQD(commission);
+      document.getElementById("walletPaidCount").textContent = `${paidOrders.length} طلب`;
+    }
+
+    async function updateCommissionRate(val) {
+      if (state.role !== "admin") {
+        showToast("تعديل نسبة العمولة متاح فقط لدور الإدارة");
+        renderAdmin();
+        return;
+      }
+      const num = Number(val);
+      if (!Number.isFinite(num) || num < 0 || num > 50) {
+        showToast("أدخل نسبة صحيحة بين 0 و 50");
+        renderAdmin();
+        return;
+      }
+      state.commissionRate = num;
+      enqueueOperation("update_commission", { commissionRate: num });
+      saveState();
+      renderWallet();
+      renderAdmin();
+      showToast(`تم تحديث نسبة العمولة إلى ${num}%`);
+      if (isCloudConfigured() && cloudUser && navigator.onLine) {
+        await syncCloudData(false);
+      }
     }
 
     function renderErrorLogs() {
-      const box = document.getElementById("errorLogsList");
-      if (!box) return;
-      if (!state.errorLogs.length) {
-        box.innerHTML = `<p class="text-slate-400">لا توجد أخطاء مسجلة حالياً.</p>`;
+      const el = document.getElementById("errorLogsList");
+      if (!el) return;
+      const logs = Array.isArray(state.errorLogs) ? state.errorLogs : [];
+      if (logs.length === 0) {
+        el.innerHTML = `<div class="text-slate-400 bg-slate-50 p-2.5 rounded-xl">لا توجد أخطاء مسجلة.</div>`;
         return;
       }
-      box.innerHTML = state.errorLogs.map(log => `
-        <div class="bg-slate-50 px-3 py-2 rounded-xl flex items-center justify-between gap-2">
-          <span class="text-slate-700 font-semibold">[${escapeHTML(log.context)}] ${escapeHTML(log.message)}</span>
-          <span class="text-[10px] text-slate-400 shrink-0">${formatDateTime(log.time)}</span>
+      el.innerHTML = logs.map(item => `
+        <div class="bg-slate-50 border border-slate-200/70 rounded-xl p-2 flex items-center justify-between gap-2">
+          <span class="text-slate-700"><b>[${escapeHTML(item.context)}]</b> ${escapeHTML(item.message)}</span>
+          <span class="text-[10px] text-slate-400 shrink-0">${escapeHTML(String(item.time || "").slice(11, 19))}</span>
         </div>
       `).join("");
     }
 
     function clearErrorLogs() {
-      if (state.role !== "admin") {
-        showToast("مسح السجل مخصص للإدارة فقط");
-        return;
-      }
       state.errorLogs = [];
       saveState();
       renderErrorLogs();
       showToast("تم مسح سجل الأخطاء");
     }
 
-    function renderWalletAndAdmin() {
-      const paidOrders = state.orders.filter(o => o.status === "مدفوع");
-      const grossPaid = paidOrders.reduce((sum, o) => sum + Number(o.price || 0), 0);
-      const commission = Math.round((grossPaid * state.commissionRate) / 100);
-      const workerNet = grossPaid - commission;
-
-      document.getElementById("walletWorkerTotal").textContent = formatIQD(workerNet);
-      document.getElementById("walletCommissionTotal").textContent = formatIQD(commission);
-      document.getElementById("walletPaidCount").textContent = `${paidOrders.length} طلب`;
-      document.getElementById("commissionRateInput").value = state.commissionRate;
-
-      document.getElementById("adminSummary").innerHTML = `
-        <div class="bg-slate-50 p-3 rounded-xl">
-          <div class="text-xs text-slate-500">إجمالي الطلبات</div>
-          <div class="text-lg font-extrabold text-slate-900 mt-1">${state.orders.length}</div>
-        </div>
-        <div class="bg-slate-50 p-3 rounded-xl">
-          <div class="text-xs text-slate-500">عدد العمال</div>
-          <div class="text-lg font-extrabold text-slate-900 mt-1">${state.workers.length}</div>
-        </div>
-        <div class="bg-slate-50 p-3 rounded-xl">
-          <div class="text-xs text-slate-500">النزاعات المفتوحة</div>
-          <div class="text-lg font-extrabold text-rose-700 mt-1">${state.orders.filter(o => o.status === "نزاع").length}</div>
-        </div>
-        <div class="bg-slate-50 p-3 rounded-xl">
-          <div class="text-xs text-slate-500">العمولات المحصلة</div>
-          <div class="text-lg font-extrabold text-amber-700 mt-1">${formatIQD(commission)}</div>
-        </div>
-      `;
-
-      renderErrorLogs();
-    }
-
-    async function updateCommissionRate(val) {
-      if (state.role !== "admin") {
-        showToast("تعديل نسبة العمولة مخصص للإدارة فقط");
-        document.getElementById("commissionRateInput").value = state.commissionRate;
-        return;
-      }
-      const num = Math.max(0, Math.min(50, Number(val) || 0));
-      state.commissionRate = num;
-      saveState();
-      document.getElementById("commissionRateInput").value = num;
-      showToast(`تم تحديث نسبة العمولة إلى ${num}%`);
-      renderWalletAndAdmin();
-
-      if (isCloudConfigured() && cloudUser) {
-        if (navigator.onLine === false) {
-          enqueueOperation("commissionRate", { id: "settings", rate: num });
-          return;
-        }
-        const { error } = await supabaseClient
-          .from("app_settings")
-          .update({ commission_rate: num, updated_at: new Date().toISOString() })
-          .eq("id", 1);
-        if (error) recordErrorLog("updateCommissionRate.sync", error);
-      }
-    }
-
     function exportBackupJSON() {
-      if (state.role !== "admin") {
-        showToast("تصدير النسخة الاحتياطية مخصص للإدارة فقط");
-        return;
-      }
-      const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+      const payload = {
+        app: "iraq-workers",
+        version: 4,
+        exportedAt: new Date().toISOString(),
+        data: {
+          commissionRate: state.commissionRate,
+          workers: state.workers,
+          orders: state.orders
+        }
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = `iraq-workers-backup-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      showToast("تم تصدير النسخة الاحتياطية بنجاح");
+      showToast("تم تصدير النسخة الاحتياطية");
     }
 
     function importBackupJSON(event) {
-      if (state.role !== "admin") {
-        showToast("استيراد النسخة الاحتياطية مخصص للإدارة فقط");
-        event.target.value = "";
-        return;
-      }
       const file = event.target.files && event.target.files[0];
       if (!file) return;
-
       const reader = new FileReader();
       reader.onload = () => {
         try {
-          const parsed = JSON.parse(String(reader.result || ""));
-          if (!Array.isArray(parsed.orders) || !Array.isArray(parsed.workers)) {
-            showToast("ملف النسخة الاحتياطية غير مطابق لبنية التطبيق");
-            return;
+          const parsed = JSON.parse(String(reader.result || "{}"));
+          const incoming = parsed && parsed.data && typeof parsed.data === "object" ? parsed.data : parsed;
+          if (!Array.isArray(incoming.workers) || !Array.isArray(incoming.orders)) {
+            throw new Error("صيغة ملف النسخة الاحتياطية غير صالحة");
           }
-          state = normalizeState(parsed);
+          state = normalizeState({
+            ...state,
+            commissionRate: incoming.commissionRate,
+            workers: incoming.workers,
+            orders: incoming.orders
+          });
           saveState();
-          updateRoleUI();
           renderAll();
-          switchTab(state.activeTab || "admin");
-          showToast("تمت استعادة النسخة الاحتياطية بنجاح");
+          showToast("تم استيراد النسخة الاحتياطية بنجاح");
         } catch (err) {
           recordErrorLog("importBackupJSON", err);
-          showToast("تعذر قراءة ملف النسخة الاحتياطية");
+          showToast("تعذر استيراد الملف: تأكد من صحة ملف JSON");
         } finally {
           event.target.value = "";
         }
@@ -1772,64 +1586,61 @@
       reader.readAsText(file);
     }
 
+    function renderAdmin() {
+      if (state.role !== "admin") return;
+      document.getElementById("commissionRateInput").value = state.commissionRate;
+      const totalOrders = state.orders.length;
+      const activeOrders = state.orders.filter(o => o.status === "بانتظار عامل" || o.status === "قيد التنفيذ" || o.status === "بانتظار تأكيد الطرفين").length;
+      const paidOrders = state.orders.filter(o => o.status === "مدفوع" || o.settled).length;
+      const totalWorkers = state.workers.length;
+
+      document.getElementById("adminSummary").innerHTML = `
+        <div class="bg-slate-50 p-3 rounded-xl"><div class="text-xs text-slate-500">إجمالي الطلبات</div><div class="text-lg font-extrabold">${totalOrders}</div></div>
+        <div class="bg-amber-50 p-3 rounded-xl"><div class="text-xs text-amber-800">طلبات جارية</div><div class="text-lg font-extrabold text-amber-900">${activeOrders}</div></div>
+        <div class="bg-emerald-50 p-3 rounded-xl"><div class="text-xs text-emerald-800">طلبات مدفوعة</div><div class="text-lg font-extrabold text-emerald-900">${paidOrders}</div></div>
+        <div class="bg-teal-50 p-3 rounded-xl"><div class="text-xs text-teal-800">العمال المسجلون</div><div class="text-lg font-extrabold text-teal-900">${totalWorkers}</div></div>
+      `;
+      renderErrorLogs();
+    }
+
     function resetDemoData() {
-      if (state.role !== "admin") {
-        showToast("إعادة الضبط مخصصة للإدارة فقط");
-        return;
-      }
       state = getDefaultState();
       saveState();
-      updateRoleUI();
       renderAll();
-      switchTab("home");
-      showToast("تمت إعادة ضبط البيانات التجريبية بنجاح");
+      showToast("تمت إعادة ضبط البيانات التجريبية");
     }
 
     function renderAll() {
+      renderRoleBadge();
+      updateCloudStatusUI();
       renderCategories();
       renderOrders();
       renderWorkers();
-      renderWalletAndAdmin();
-      updateAuthUI();
-    }
-
-    function syncNetworkStatus() {
-      const banner = document.getElementById("networkBanner");
-      if (!banner) return;
-      banner.classList.toggle("hidden", navigator.onLine !== false);
+      renderWallet();
+      renderAdmin();
     }
 
     window.addEventListener("online", async () => {
-      syncNetworkStatus();
-      showToast("عاد الاتصال بالإنترنت — جاري مزامنة العمليات المعلقة");
-      await flushPendingQueue();
-      await syncCloudData(false);
-    });
-
-    window.addEventListener("offline", () => {
-      syncNetworkStatus();
-      showToast("انقطع الاتصال بالإنترنت — العمل مستمر محلياً");
-    });
-
-    window.addEventListener("error", (ev) => {
-      recordErrorLog("window.error", ev.error || ev.message);
-    });
-    window.addEventListener("unhandledrejection", (ev) => {
-      recordErrorLog("promise.rejection", ev.reason);
-    });
-
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !document.getElementById("orderModal").classList.contains("hidden")) {
-        closeOrderModal();
+      updateNetworkBanner();
+      showToast("عاد الاتصال بالإنترنت — جاري المزامنة...");
+      if (isCloudConfigured() && cloudUser) {
+        await syncCloudData(false);
       }
     });
 
-    populateSelects();
-    updateRoleUI();
-    syncNetworkStatus();
+    window.addEventListener("offline", () => {
+      updateNetworkBanner();
+      showToast("أنت تعمل حالياً دون اتصال بالإنترنت");
+    });
+
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape") closeOrderModal();
+    });
+
+    initSelectors();
+    updateNetworkBanner();
     renderAll();
-    switchTab(state.activeTab || "home");
-    initCloudAuth();
+    initSupabase();
   </script>
 </body>
 </html>
