@@ -3,12 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="عمّال العراق — منصة لطلب العمال والمهنيين في محافظات العراق بنظام الدفع بعد الإنجاز وتأكيد الطرفين." />
   <title>عمّال العراق 🇮🇶</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>
     body {
-      font-family: 'Cairo', sans-serif;
+      font-family: 'Cairo', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background-color: #f8fafc;
     }
     .tab-btn.active {
@@ -20,11 +24,23 @@
       transform: translateY(-2px);
     }
     .tab-icon {
-      transition: all 0.2s ease;
+      transition: transform 0.2s ease, background-color 0.2s ease;
+    }
+    @keyframes gentleFade {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade {
+      animation: gentleFade 0.2s ease-out;
     }
   </style>
 </head>
 <body class="text-slate-800 pb-24">
+
+  <!-- تنبيه حالة الاتصال والمزامنة -->
+  <div id="networkBanner" class="hidden bg-amber-950 text-amber-100 text-xs px-4 py-2 text-center border-b border-amber-800">
+    أنت تعمل حالياً دون اتصال بالإنترنت — يتم حفظ التغييرات في قائمة الانتظار ومزامنتها تلقائياً عند عودة الاتصال.
+  </div>
 
   <!-- الشريط العلوي -->
   <header class="bg-teal-800 text-white sticky top-0 z-30 shadow-md">
@@ -35,7 +51,7 @@
         </div>
         <div>
           <h1 class="font-extrabold text-base sm:text-lg leading-tight">عمّال العراق 🇮🇶</h1>
-          <p class="text-[11px] text-teal-200">منصة طلب العمال والمهنيين الموثقة</p>
+          <p id="cloudStatusSub" class="text-[11px] text-teal-200">وضع محلي (أضف بيانات Supabase للمزامنة السحابية)</p>
         </div>
       </div>
 
@@ -43,7 +59,8 @@
         <span id="roleBadge" class="text-xs bg-teal-900/90 border border-teal-600 px-2.5 py-1 rounded-full">
           حساب: زبون
         </span>
-        <button onclick="switchRole()" class="text-xs bg-amber-400 hover:bg-amber-300 text-teal-950 font-bold px-3 py-1.5 rounded-lg transition cursor-pointer">
+        <button type="button" onclick="switchRole()" aria-label="تبديل الدور"
+          class="text-xs bg-amber-400 hover:bg-amber-300 text-teal-950 font-bold px-3 py-1.5 rounded-lg transition cursor-pointer">
           تبديل الدور
         </button>
       </div>
@@ -51,14 +68,14 @@
   </header>
 
   <!-- الإشعارات السريعة -->
-  <div id="toast" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 hidden bg-slate-900 text-white text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-xl border border-slate-700"></div>
+  <div id="toast" role="status" aria-live="polite"
+    class="fixed top-20 left-1/2 -translate-x-1/2 z-50 hidden bg-slate-900 text-white text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-xl border border-slate-700 max-w-[92vw] text-center"></div>
 
   <!-- المحتوى الرئيسي -->
   <main class="max-w-4xl mx-auto px-4 pt-4">
 
     <!-- 1. تبويب الرئيسية -->
-    <section id="view-home" class="space-y-5">
-      <!-- بطاقة الترحيب ونشر طلب -->
+    <section id="view-home" class="space-y-5 animate-fade">
       <div class="bg-gradient-to-l from-teal-900 via-teal-800 to-emerald-800 text-white rounded-2xl p-5 shadow-md">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div class="space-y-1">
@@ -68,23 +85,27 @@
               انشر طلبك وحدد المحافظة والمنطقة والأجر بالدينار العراقي، والعامل المختص يقبله وينفذه بكل أمان.
             </p>
           </div>
-          <button onclick="openOrderModal()" class="bg-amber-400 hover:bg-amber-300 text-teal-950 font-extrabold text-sm px-5 py-3 rounded-xl shadow shrink-0 transition cursor-pointer">
+          <button type="button" onclick="openOrderModal()"
+            class="bg-amber-400 hover:bg-amber-300 text-teal-950 font-extrabold text-sm px-5 py-3 rounded-xl shadow shrink-0 transition cursor-pointer">
             + نشر طلب عمل
           </button>
         </div>
       </div>
 
-      <!-- البحث والفلترة حسب المحافظة -->
-      <div class="bg-white p-3.5 rounded-2xl shadow-sm border border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <input id="searchSpecialty" oninput="renderCategories()" type="text" placeholder="ابحث عن اختصاص (منوّم، تنظيف، كهربائي، سباك...)"
-          class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600" />
-        <select id="filterGov" onchange="renderCategories()"
-          class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 bg-white">
-          <option value="">كل محافظات العراق (18 محافظة)</option>
-        </select>
+      <div class="bg-white p-3.5 rounded-2xl shadow-sm border border-slate-100 space-y-2.5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <input id="searchSpecialty" oninput="renderCategories()" type="text"
+            aria-label="ابحث عن اختصاص"
+            placeholder="ابحث عن اختصاص (منوّم، تنظيف، كهربائي، سباك...)"
+            class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600" />
+          <select id="filterGov" onchange="renderCategories()" aria-label="اختر المحافظة"
+            class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 bg-white">
+            <option value="">كل محافظات العراق (18 محافظة)</option>
+          </select>
+        </div>
+        <div id="govAvailabilityHint" class="text-xs text-teal-800 bg-teal-50/80 px-3 py-2 rounded-xl hidden"></div>
       </div>
 
-      <!-- التخصصات الأكثر طلباً -->
       <div>
         <div class="flex items-center justify-between mb-3">
           <h3 class="font-extrabold text-base sm:text-lg text-slate-900">التخصصات الأكثر طلباً في العراق</h3>
@@ -95,32 +116,37 @@
     </section>
 
     <!-- 2. تبويب الطلبات -->
-    <section id="view-orders" class="hidden space-y-4">
+    <section id="view-orders" class="hidden space-y-4 animate-fade">
       <div class="flex flex-wrap items-center justify-between gap-2 bg-white p-3.5 rounded-2xl border border-slate-100 shadow-sm">
         <div>
           <h2 class="font-extrabold text-lg text-slate-900">إدارة الطلبات والأعمال</h2>
           <p class="text-xs text-slate-500">متابعة الحالات وقبول الطلبات وتأكيد الإنجاز المزدوج (الزبون + العامل)</p>
         </div>
-        <button onclick="openOrderModal()" class="bg-teal-700 hover:bg-teal-600 text-white text-xs sm:text-sm font-bold px-4 py-2.5 rounded-xl transition cursor-pointer">
-          + طلب جديد
-        </button>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="syncCloudData(true)"
+            class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-3 py-2.5 rounded-xl transition cursor-pointer">
+            مزامنة الآن
+          </button>
+          <button type="button" onclick="openOrderModal()"
+            class="bg-teal-700 hover:bg-teal-600 text-white text-xs sm:text-sm font-bold px-4 py-2.5 rounded-xl transition cursor-pointer">
+            + طلب جديد
+          </button>
+        </div>
       </div>
 
-      <!-- فلترة حالة الطلب -->
       <div class="flex gap-2 overflow-x-auto pb-1" id="statusFilters"></div>
-
-      <!-- قائمة الطلبات -->
       <div id="ordersList" class="space-y-3"></div>
     </section>
 
     <!-- 3. تبويب العمال -->
-    <section id="view-workers" class="hidden space-y-4">
+    <section id="view-workers" class="hidden space-y-4 animate-fade">
       <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 class="font-extrabold text-lg text-slate-900">سجل العمال والمهنيين</h2>
           <p class="text-xs text-slate-500">كل عامل يمكن أن يمتلك أكثر من اختصاص ويستقبل الطلبات المناسبة له</p>
         </div>
-        <button onclick="switchTab('account')" class="bg-amber-400 hover:bg-amber-300 text-teal-950 text-xs sm:text-sm font-bold px-4 py-2.5 rounded-xl transition cursor-pointer">
+        <button type="button" onclick="switchTab('account')"
+          class="bg-amber-400 hover:bg-amber-300 text-teal-950 text-xs sm:text-sm font-bold px-4 py-2.5 rounded-xl transition cursor-pointer">
           تسجيل حساب عامل جديد
         </button>
       </div>
@@ -128,7 +154,7 @@
     </section>
 
     <!-- 4. تبويب المحفظة -->
-    <section id="view-wallet" class="hidden space-y-4">
+    <section id="view-wallet" class="hidden space-y-4 animate-fade">
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
           <p class="text-xs text-slate-500">مستحقات العمال المحوّلة</p>
@@ -153,8 +179,47 @@
       </div>
     </section>
 
-    <!-- 5. تبويب الحساب وتسجيل العامل -->
-    <section id="view-account" class="hidden space-y-4">
+    <!-- 5. تبويب الحساب وتسجيل العامل + حساب السحابة -->
+    <section id="view-account" class="hidden space-y-4 animate-fade">
+      <!-- بطاقة حساب السحابة والمزامنة -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div>
+            <h2 class="font-extrabold text-base text-slate-900">حساب المزامنة السحابية (Supabase)</h2>
+            <p id="authUserInfo" class="text-xs text-slate-500">غير مسجّل دخول سحابياً — البيانات محفوظة محلياً.</p>
+          </div>
+          <span id="pendingQueueBadge" class="text-xs bg-slate-100 text-slate-700 px-3 py-1 rounded-full font-bold">
+            العمليات المعلقة: 0
+          </span>
+        </div>
+
+        <div id="authLoggedOutBox" class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <input id="authEmail" type="email" placeholder="البريد الإلكتروني"
+            class="px-3.5 py-2 text-sm rounded-xl border border-slate-200" />
+          <input id="authPassword" type="password" placeholder="كلمة المرور (6 أحرف فأكثر)"
+            class="px-3.5 py-2 text-sm rounded-xl border border-slate-200" />
+          <div class="flex gap-2">
+            <button type="button" onclick="signInCloud()"
+              class="flex-1 bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold px-3 py-2 rounded-xl cursor-pointer">
+              دخول
+            </button>
+            <button type="button" onclick="signUpCloud()"
+              class="flex-1 bg-amber-400 hover:bg-amber-300 text-teal-950 text-xs font-bold px-3 py-2 rounded-xl cursor-pointer">
+              تسجيل جديد
+            </button>
+          </div>
+        </div>
+
+        <div id="authLoggedInBox" class="hidden flex items-center justify-between gap-2">
+          <span class="text-xs text-emerald-700 font-bold">متصل بحساب سحابي — مزامنة البيانات والملفات مفعّلة.</span>
+          <button type="button" onclick="signOutCloud()"
+            class="bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold px-3.5 py-2 rounded-xl cursor-pointer">
+            تسجيل الخروج
+          </button>
+        </div>
+      </div>
+
+      <!-- نموذج تسجيل / تحديث حساب عامل -->
       <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-4">
         <div class="border-b border-slate-100 pb-3">
           <h2 class="font-extrabold text-lg text-slate-900">تسجيل / تحديث حساب عامل</h2>
@@ -164,27 +229,34 @@
         <form onsubmit="registerWorker(event)" class="space-y-4">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs font-bold mb-1">اسم العامل الكامل</label>
-              <input id="wName" required type="text" placeholder="مثال: علي حسين"
+              <label for="wName" class="block text-xs font-bold mb-1">اسم العامل الكامل</label>
+              <input id="wName" required minlength="3" maxlength="60" type="text" placeholder="مثال: علي حسين"
                 class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600" />
             </div>
             <div>
-              <label class="block text-xs font-bold mb-1">رقم الهاتف</label>
-              <input id="wPhone" required type="tel" placeholder="07700000000"
+              <label for="wPhone" class="block text-xs font-bold mb-1">رقم الهاتف العراقي</label>
+              <input id="wPhone" required type="tel" inputmode="numeric" pattern="^07[3-9][0-9]{8}$" maxlength="11"
+                placeholder="07700000000" title="أدخل رقم هاتف عراقي صحيح مكون من 11 رقماً يبدأ بـ 07"
                 class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600" />
             </div>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs font-bold mb-1">المحافظة</label>
+              <label for="wGov" class="block text-xs font-bold mb-1">المحافظة</label>
               <select id="wGov" class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-white"></select>
             </div>
             <div>
-              <label class="block text-xs font-bold mb-1">المنطقة / الحي</label>
-              <input id="wArea" required type="text" placeholder="مثال: الكرادة / وسط المدينة"
+              <label for="wArea" class="block text-xs font-bold mb-1">المنطقة / الحي</label>
+              <input id="wArea" required minlength="2" maxlength="60" type="text" placeholder="مثال: الكرادة / وسط المدينة"
                 class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600" />
             </div>
+          </div>
+
+          <div>
+            <label for="wDocFile" class="block text-xs font-bold mb-1">مرفق توثيق أو شهادة مهنية (اختياري — JPG/PNG/WEBP/PDF حتى 5MB)</label>
+            <input id="wDocFile" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf"
+              class="w-full text-xs text-slate-600 file:ml-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:bg-teal-50 file:text-teal-800 file:font-bold cursor-pointer" />
           </div>
 
           <div>
@@ -192,23 +264,24 @@
             <div id="wSpecialtiesCheckboxes" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
           </div>
 
-          <button type="submit" class="w-full sm:w-auto bg-teal-700 hover:bg-teal-600 text-white font-bold text-sm px-6 py-3 rounded-xl transition cursor-pointer">
+          <button type="submit"
+            class="w-full sm:w-auto bg-teal-700 hover:bg-teal-600 text-white font-bold text-sm px-6 py-3 rounded-xl transition cursor-pointer">
             حفظ وإضافة العامل إلى السجل
           </button>
         </form>
       </div>
     </section>
 
-    <!-- 6. تبويب الإدارة -->
-    <section id="view-admin" class="hidden space-y-4">
+    <!-- 6. تبويب الإدارة والنسخ الاحتياطي والسجلات -->
+    <section id="view-admin" class="hidden space-y-4 animate-fade">
       <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-4">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <div>
             <h2 class="font-extrabold text-lg text-slate-900">لوحة إدارة التطبيق</h2>
-            <p class="text-xs text-slate-500">ضبط نسبة العمولة، متابعة الطلبات والنزاعات، وإدارة حسابات العمال</p>
+            <p class="text-xs text-slate-500">ضبط نسبة العمولة، متابعة الطلبات والنزاعات، والنسخ الاحتياطي وسجل الأخطاء</p>
           </div>
           <div class="flex items-center gap-2">
-            <label class="text-xs font-bold">نسبة العمولة (%):</label>
+            <label for="commissionRateInput" class="text-xs font-bold">نسبة العمولة (%):</label>
             <input id="commissionRateInput" type="number" min="0" max="50" value="10"
               onchange="updateCommissionRate(this.value)"
               class="w-20 px-2.5 py-1.5 text-sm font-bold border border-slate-300 rounded-lg text-center" />
@@ -216,52 +289,85 @@
         </div>
 
         <div id="adminSummary" class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center"></div>
+
+        <div class="pt-3 border-t border-slate-100 space-y-2">
+          <h3 class="font-bold text-sm text-slate-900">النسخ الاحتياطي والاستعادة</h3>
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" onclick="exportBackupJSON()"
+              class="px-3.5 py-2 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-bold cursor-pointer">
+              تصدير نسخة احتياطية (JSON)
+            </button>
+            <label class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer">
+              استيراد نسخة احتياطية
+              <input id="importBackupInput" type="file" accept="application/json" onchange="importBackupJSON(event)" class="hidden" />
+            </label>
+            <button type="button" onclick="resetDemoData()"
+              class="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold cursor-pointer">
+              إعادة ضبط البيانات التجريبية
+            </button>
+          </div>
+        </div>
+
+        <div class="pt-3 border-t border-slate-100 space-y-2">
+          <div class="flex items-center justify-between">
+            <h3 class="font-bold text-sm text-slate-900">سجل الأخطاء المحلي</h3>
+            <button type="button" onclick="clearErrorLogs()"
+              class="text-xs text-slate-500 hover:text-rose-700 font-bold cursor-pointer">
+              مسح السجل
+            </button>
+          </div>
+          <div id="errorLogsList" class="space-y-1.5 text-xs"></div>
+        </div>
       </div>
     </section>
 
   </main>
 
   <!-- نافذة نشر طلب جديد -->
-  <div id="orderModal" class="fixed inset-0 z-50 hidden bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+  <div id="orderModal" role="dialog" aria-modal="true" aria-labelledby="orderModalTitle"
+    onclick="if(event.target === this) closeOrderModal()"
+    class="fixed inset-0 z-50 hidden bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
     <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
       <div class="bg-teal-800 text-white px-5 py-3.5 flex items-center justify-between">
-        <h3 class="font-extrabold text-base">نشر طلب عمل جديد</h3>
-        <button onclick="closeOrderModal()" class="text-teal-100 hover:text-white text-xl leading-none cursor-pointer">&times;</button>
+        <h3 id="orderModalTitle" class="font-extrabold text-base">نشر طلب عمل جديد</h3>
+        <button type="button" onclick="closeOrderModal()" aria-label="إغلاق النافذة"
+          class="text-teal-100 hover:text-white text-2xl leading-none cursor-pointer">&times;</button>
       </div>
 
       <form onsubmit="submitOrder(event)" class="p-5 space-y-3.5 overflow-y-auto text-sm">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-bold mb-1">اسم الزبون</label>
-            <input id="oCustomer" required type="text" placeholder="اسمك الكامل"
+            <label for="oCustomer" class="block text-xs font-bold mb-1">اسم الزبون</label>
+            <input id="oCustomer" required minlength="3" maxlength="60" type="text" placeholder="اسمك الكامل"
               class="w-full px-3 py-2 rounded-xl border border-slate-200" />
           </div>
           <div>
-            <label class="block text-xs font-bold mb-1">رقم الهاتف</label>
-            <input id="oPhone" required type="tel" placeholder="07800000000"
+            <label for="oPhone" class="block text-xs font-bold mb-1">رقم الهاتف العراقي</label>
+            <input id="oPhone" required type="tel" inputmode="numeric" pattern="^07[3-9][0-9]{8}$" maxlength="11"
+              placeholder="07800000000" title="أدخل رقم هاتف عراقي صحيح مكون من 11 رقماً يبدأ بـ 07"
               class="w-full px-3 py-2 rounded-xl border border-slate-200" />
           </div>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-bold mb-1">الاختصاص المطلوب</label>
+            <label for="oSpecialty" class="block text-xs font-bold mb-1">الاختصاص المطلوب</label>
             <select id="oSpecialty" class="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"></select>
           </div>
           <div>
-            <label class="block text-xs font-bold mb-1">المحافظة</label>
+            <label for="oGov" class="block text-xs font-bold mb-1">المحافظة</label>
             <select id="oGov" class="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"></select>
           </div>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-bold mb-1">المنطقة أو الحي</label>
-            <input id="oArea" required type="text" placeholder="مثال: الحسين / المنصور"
+            <label for="oArea" class="block text-xs font-bold mb-1">المنطقة أو الحي</label>
+            <input id="oArea" required minlength="2" maxlength="60" type="text" placeholder="مثال: الحسين / المنصور"
               class="w-full px-3 py-2 rounded-xl border border-slate-200" />
           </div>
           <div>
-            <label class="block text-xs font-bold mb-1">موعد حضور العامل</label>
+            <label for="oTime" class="block text-xs font-bold mb-1">موعد حضور العامل</label>
             <input id="oTime" required type="datetime-local"
               class="w-full px-3 py-2 rounded-xl border border-slate-200" />
           </div>
@@ -269,12 +375,12 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-bold mb-1">الأجر المعروض (دينار عراقي)</label>
-            <input id="oPrice" required type="number" min="5000" step="1000" value="35000"
+            <label for="oPrice" class="block text-xs font-bold mb-1">الأجر المعروض (دينار عراقي)</label>
+            <input id="oPrice" required type="number" min="5000" max="10000000" step="1000" value="35000"
               class="w-full px-3 py-2 rounded-xl border border-slate-200" />
           </div>
           <div>
-            <label class="block text-xs font-bold mb-1">التحقق من وسيلة الدفع (بعد الإنجاز)</label>
+            <label for="oPaymentMethod" class="block text-xs font-bold mb-1">التحقق من وسيلة الدفع (بعد الإنجاز)</label>
             <select id="oPaymentMethod" class="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white">
               <option value="زين كاش (تحقق صالح)">زين كاش (تحقق صالح)</option>
               <option value="آسيا حوالة (تحقق صالح)">آسيا حوالة (تحقق صالح)</option>
@@ -284,16 +390,25 @@
         </div>
 
         <div>
-          <label class="block text-xs font-bold mb-1">تفاصيل العمل المطلوب</label>
-          <textarea id="oDetails" rows="2" required placeholder="اشرح طبيعة العمل أو المساعدة المطلوبة..."
+          <label for="oAttachment" class="block text-xs font-bold mb-1">صورة أو ملف توضيحي للعمل (اختياري — حتى 5MB)</label>
+          <input id="oAttachment" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf"
+            class="w-full text-xs text-slate-600 file:ml-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:bg-teal-50 file:text-teal-800 file:font-bold cursor-pointer" />
+        </div>
+
+        <div>
+          <label for="oDetails" class="block text-xs font-bold mb-1">تفاصيل العمل المطلوب</label>
+          <textarea id="oDetails" rows="2" required minlength="5" maxlength="400"
+            placeholder="اشرح طبيعة العمل أو المساعدة المطلوبة..."
             class="w-full px-3 py-2 rounded-xl border border-slate-200"></textarea>
         </div>
 
         <div class="pt-2 flex items-center justify-end gap-2">
-          <button type="button" onclick="closeOrderModal()" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs cursor-pointer">
+          <button type="button" onclick="closeOrderModal()"
+            class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs cursor-pointer">
             إلغاء
           </button>
-          <button type="submit" class="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-600 text-white font-bold text-xs cursor-pointer">
+          <button type="submit"
+            class="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-600 text-white font-bold text-xs cursor-pointer">
             تأكيد ونشر الطلب
           </button>
         </div>
@@ -301,35 +416,35 @@
     </div>
   </div>
 
-  <!-- شريط التنقل السفلي المتوازن في منتصف الشاشة -->
-  <nav class="fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-lg">
+  <!-- شريط التنقل السفلي -->
+  <nav aria-label="التنقل الرئيسي" class="fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-lg">
     <div class="max-w-lg mx-auto px-2 py-1.5 flex items-center justify-between text-center">
-      <button onclick="switchTab('home')" data-tab="home" class="tab-btn active flex-1 flex flex-col items-center justify-center py-1 text-[11px] text-slate-500 cursor-pointer">
+      <button type="button" onclick="switchTab('home')" data-tab="home" class="tab-btn active flex-1 flex flex-col items-center justify-center py-1 text-[11px] text-slate-500 cursor-pointer">
         <span class="tab-icon w-9 h-7 rounded-xl flex items-center justify-center text-base mb-0.5">🏠</span>
         <span>الرئيسية</span>
       </button>
 
-      <button onclick="switchTab('orders')" data-tab="orders" class="tab-btn flex-1 flex flex-col items-center justify-center py-1 text-[11px] text-slate-500 cursor-pointer">
+      <button type="button" onclick="switchTab('orders')" data-tab="orders" class="tab-btn flex-1 flex flex-col items-center justify-center py-1 text-[11px] text-slate-500 cursor-pointer">
         <span class="tab-icon w-9 h-7 rounded-xl flex items-center justify-center text-base mb-0.5">📋</span>
         <span>الطلبات</span>
       </button>
 
-      <button onclick="switchTab('workers')" data-tab="workers" class="tab-btn flex-1 flex flex-col items-center justify-center py-1 text-[11px] text-slate-500 cursor-pointer">
+      <button type="button" onclick="switchTab('workers')" data-tab="workers" class="tab-btn flex-1 flex flex-col items-center justify-center py-1 text-[11px] text-slate-500 cursor-pointer">
         <span class="tab-icon w-9 h-7 rounded-xl flex items-center justify-center text-base mb-0.5">👷</span>
         <span>العمال</span>
       </button>
 
-      <button onclick="switchTab('wallet')" data-tab="wallet" class="tab-btn flex-1 flex flex-col items-center justify-center py-1 text-[11px] text-slate-500 cursor-pointer">
+      <button type="button" onclick="switchTab('wallet')" data-tab="wallet" class="tab-btn flex-1 flex flex-col items-center justify-center py-1 text-[11px] text-slate-500 cursor-pointer">
         <span class="tab-icon w-9 h-7 rounded-xl flex items-center justify-center text-base mb-0.5">💳</span>
         <span>المحفظة</span>
       </button>
 
-      <button onclick="switchTab('account')" data-tab="account" class="tab-btn flex-1 flex flex-col items-center justify-center py-1 text-[11px] text-slate-500 cursor-pointer">
+      <button type="button" onclick="switchTab('account')" data-tab="account" class="tab-btn flex-1 flex flex-col items-center justify-center py-1 text-[11px] text-slate-500 cursor-pointer">
         <span class="tab-icon w-9 h-7 rounded-xl flex items-center justify-center text-base mb-0.5">👤</span>
         <span>حسابي</span>
       </button>
 
-      <button onclick="switchTab('admin')" data-tab="admin" class="tab-btn flex-1 flex flex-col items-center justify-center py-1 text-[11px] text-slate-500 cursor-pointer">
+      <button type="button" onclick="switchTab('admin')" data-tab="admin" class="tab-btn flex-1 flex flex-col items-center justify-center py-1 text-[11px] text-slate-500 cursor-pointer">
         <span class="tab-icon w-9 h-7 rounded-xl flex items-center justify-center text-base mb-0.5">⚙️</span>
         <span>الإدارة</span>
       </button>
@@ -337,6 +452,20 @@
   </nav>
 
   <script>
+    // ضع بيانات مشروعك من Supabase هنا عند التفعيل السحابي (لا تضع مفاتيح سرية هنا)
+    const SUPABASE_CONFIG = {
+      url: "",
+      anonKey: "",
+      bucket: "attachments",
+      maxFileBytes: 5 * 1024 * 1024,
+      allowedMimeTypes: ["image/jpeg", "image/png", "image/webp", "application/pdf"]
+    };
+
+    const STORAGE_KEY = "iraq_workers_app_v4";
+    const IRAQI_PHONE_REGEX = /^07[3-9][0-9]{8}$/;
+    const VALID_ROLES = ["customer", "worker", "admin"];
+    const VALID_TABS = ["home", "orders", "workers", "wallet", "account", "admin"];
+
     const GOVERNORATES = [
       "بغداد", "البصرة", "نينوى", "أربيل", "النجف", "كربلاء",
       "الأنبار", "ديالى", "ذي قار", "بابل", "صلاح الدين", "واسط",
@@ -356,208 +485,828 @@
       { id: "daily", name: "عامل يومي عام", icon: "🤝", desc: "مساعدة عامة حسب حاجة الزبون" }
     ];
 
-    let state = {
-      role: "customer",
-      commissionRate: 10,
-      selectedStatus: "الكل",
-      activeWorkerId: "w1",
-      workers: [
-        {
-          id: "w1",
-          name: "حيدر الشمري",
-          phone: "07712345678",
-          gov: "بغداد",
-          area: "الكرادة",
-          specialties: ["كهربائي", "سباك ومجاري", "تبريد وسبالت"],
-          verified: true,
-          active: true
-        },
-        {
-          id: "w2",
-          name: "زينب الربيعي",
-          phone: "07809876543",
-          gov: "النجف",
-          area: "الحي العسكري",
-          specialties: ["منوّم ومرافق مريض", "تنظيف منازل"],
-          verified: true,
-          active: true
-        }
-      ],
-      orders: [
-        {
-          id: "ORD-101",
-          customer: "مصطفى الجبوري",
-          phone: "07720001122",
-          specialty: "كهربائي",
-          gov: "بغداد",
-          area: "المنصور",
-          time: "2026-11-25T10:00",
-          price: 40000,
-          paymentMethod: "زين كاش (تحقق صالح)",
-          details: "فحص قاطع كهرباء رئيسي وتبديل جوزات",
-          status: "بانتظار عامل",
-          workerId: null,
-          workerName: null,
-          customerConfirmed: false,
-          workerConfirmed: false,
-          settled: false
-        }
-      ]
-    };
+    let supabaseClient = null;
+    let cloudUser = null;
+    let isSyncing = false;
+
+    function isCloudConfigured() {
+      return Boolean(
+        SUPABASE_CONFIG.url &&
+        SUPABASE_CONFIG.anonKey &&
+        window.supabase &&
+        typeof window.supabase.createClient === "function"
+      );
+    }
+
+    function getDefaultState() {
+      return {
+        role: "customer",
+        activeTab: "home",
+        commissionRate: 10,
+        selectedStatus: "الكل",
+        activeWorkerId: "w1",
+        pendingQueue: [],
+        errorLogs: [],
+        workers: [
+          {
+            id: "w1",
+            name: "حيدر الشمري",
+            phone: "07712345678",
+            gov: "بغداد",
+            area: "الكرادة",
+            specialties: ["كهربائي", "سباك ومجاري", "تبريد وسبالت"],
+            docPath: "",
+            verified: true,
+            active: true
+          },
+          {
+            id: "w2",
+            name: "زينب الربيعي",
+            phone: "07809876543",
+            gov: "النجف",
+            area: "الحي العسكري",
+            specialties: ["منوّم ومرافق مريض", "تنظيف منازل"],
+            docPath: "",
+            verified: true,
+            active: true
+          }
+        ],
+        orders: [
+          {
+            id: "ORD-101",
+            customer: "مصطفى الجبوري",
+            phone: "07720001122",
+            specialty: "كهربائي",
+            gov: "بغداد",
+            area: "المنصور",
+            time: "2026-11-27T10:00",
+            price: 40000,
+            paymentMethod: "زين كاش (تحقق صالح)",
+            details: "فحص قاطع كهرباء رئيسي وتبديل جوزات",
+            attachmentPath: "",
+            status: "بانتظار عامل",
+            workerId: null,
+            workerName: null,
+            customerConfirmed: false,
+            workerConfirmed: false,
+            settled: false
+          }
+        ]
+      };
+    }
+
+    function sanitizeErrorMessage(msg) {
+      return String(msg || "خطأ غير متوقع")
+        .replace(/07[0-9]{9}/g, "***")
+        .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "***")
+        .slice(0, 140);
+    }
+
+    function recordErrorLog(context, err) {
+      const entry = {
+        time: new Date().toISOString(),
+        context: String(context || "app").slice(0, 40),
+        message: sanitizeErrorMessage(err && err.message ? err.message : err)
+      };
+      state.errorLogs = [entry, ...(Array.isArray(state.errorLogs) ? state.errorLogs : [])].slice(0, 20);
+      saveState();
+      if (state.activeTab === "admin" && state.role === "admin") {
+        renderErrorLogs();
+      }
+    }
+
+    function normalizeState(rawObj) {
+      const base = getDefaultState();
+      if (!rawObj || typeof rawObj !== "object") return base;
+
+      const role = VALID_ROLES.includes(rawObj.role) ? rawObj.role : base.role;
+      let activeTab = VALID_TABS.includes(rawObj.activeTab) ? rawObj.activeTab : base.activeTab;
+      if (activeTab === "admin" && role !== "admin") activeTab = "home";
+
+      const rate = Number(rawObj.commissionRate);
+      const commissionRate = Number.isFinite(rate) ? Math.max(0, Math.min(50, rate)) : base.commissionRate;
+
+      const workers = Array.isArray(rawObj.workers) ? rawObj.workers.filter(w => w && w.id && w.name) : base.workers;
+      const orders = Array.isArray(rawObj.orders) ? rawObj.orders.filter(o => o && o.id && o.customer) : base.orders;
+      const activeWorkerId = workers.some(w => w.id === rawObj.activeWorkerId)
+        ? rawObj.activeWorkerId
+        : (workers[0] ? workers[0].id : null);
+
+      const pendingQueue = Array.isArray(rawObj.pendingQueue) ? rawObj.pendingQueue.slice(0, 100) : [];
+      const errorLogs = Array.isArray(rawObj.errorLogs) ? rawObj.errorLogs.slice(0, 20) : [];
+
+      return {
+        ...base,
+        ...rawObj,
+        role,
+        activeTab,
+        commissionRate,
+        workers,
+        orders,
+        activeWorkerId,
+        pendingQueue,
+        errorLogs
+      };
+    }
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return getDefaultState();
+        return normalizeState(JSON.parse(raw));
+      } catch (e) {
+        return getDefaultState();
+      }
+    }
+
+    let state = loadState();
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        updatePendingQueueUI();
+      } catch (e) {
+        showToast("تعذر حفظ البيانات في ذاكرة المتصفح");
+      }
+    }
+
+    function updatePendingQueueUI() {
+      const badge = document.getElementById("pendingQueueBadge");
+      if (badge) {
+        badge.textContent = `العمليات المعلقة: ${state.pendingQueue.length}`;
+      }
+    }
+
+    function enqueueOperation(opType, payload) {
+      if (!isCloudConfigured() || !cloudUser) return;
+      const opId = `${opType}:${payload.id || "global"}`;
+      state.pendingQueue = state.pendingQueue.filter(item => item.opId !== opId);
+      state.pendingQueue.push({
+        opId,
+        type: opType,
+        payload,
+        createdAt: new Date().toISOString()
+      });
+      saveState();
+    }
+
+    function escapeHTML(str) {
+      return String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
 
     function showToast(msg) {
       const el = document.getElementById("toast");
       el.textContent = msg;
       el.classList.remove("hidden");
       clearTimeout(window.toastTimer);
-      window.toastTimer = setTimeout(() => el.classList.add("hidden"), 2800);
+      window.toastTimer = setTimeout(() => el.classList.add("hidden"), 4000);
     }
 
     function formatIQD(num) {
       return Number(num || 0).toLocaleString("en-US") + " د.ع";
     }
 
-    function populateSelects() {
-      const filterGov = document.getElementById("filterGov");
-      const oGov = document.getElementById("oGov");
-      const wGov = document.getElementById("wGov");
-      const oSpecialty = document.getElementById("oSpecialty");
-      const wSpecs = document.getElementById("wSpecialtiesCheckboxes");
-
-      GOVERNORATES.forEach(g => {
-        filterGov.innerHTML += `<option value="${g}">${g}</option>`;
-        oGov.innerHTML += `<option value="${g}">${g}</option>`;
-        wGov.innerHTML += `<option value="${g}">${g}</option>`;
-      });
-
-      SPECIALTIES.forEach(s => {
-        oSpecialty.innerHTML += `<option value="${s.name}">${s.name}</option>`;
-        wSpecs.innerHTML += `
-          <label class="flex items-center gap-2 p-2 rounded-xl border border-slate-200 text-xs cursor-pointer hover:bg-teal-50">
-            <input type="checkbox" name="workerSpec" value="${s.name}" class="accent-teal-700" />
-            <span>${s.icon} ${s.name}</span>
-          </label>
-        `;
+    function formatDateTime(dtStr) {
+      if (!dtStr) return "غير محدد";
+      const d = new Date(dtStr);
+      if (Number.isNaN(d.getTime())) return escapeHTML(dtStr);
+      return d.toLocaleString("ar-IQ", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
       });
     }
 
+    function generateUniqueOrderId() {
+      const existing = new Set(state.orders.map(o => o.id));
+      let id = "ORD-" + Date.now().toString().slice(-5);
+      while (existing.has(id)) {
+        id = "ORD-" + Math.floor(10000 + Math.random() * 90000);
+      }
+      return id;
+    }
+
+    function validateAttachmentFile(file) {
+      if (!file) return { ok: true, file: null };
+      if (!SUPABASE_CONFIG.allowedMimeTypes.includes(file.type)) {
+        return { ok: false, error: "نوع الملف غير مدعوم. المسموح: JPG, PNG, WEBP, PDF" };
+      }
+      if (file.size > SUPABASE_CONFIG.maxFileBytes) {
+        return { ok: false, error: "حجم الملف يتجاوز الحد الأقصى المسموح (5 ميجابايت)" };
+      }
+      return { ok: true, file };
+    }
+
+    async function uploadAttachmentToCloud(file, folder) {
+      if (!file) return "";
+      if (!isCloudConfigured() || !cloudUser) {
+        showToast("المرفق يُحفظ محلياً فقط حتى تسجيل الدخول إلى Supabase");
+        return "";
+      }
+      const cleanName = String(file.name || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `${cloudUser.id}/${folder}/${Date.now()}_${cleanName}`;
+      const { error } = await supabaseClient.storage
+        .from(SUPABASE_CONFIG.bucket)
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (error) throw error;
+      return path;
+    }
+
+    async function downloadAttachment(path) {
+      if (!path) return;
+      if (!isCloudConfigured() || !cloudUser) {
+        showToast("يلزم تسجيل الدخول السحابي لاسترجاع الملفات المخزنة");
+        return;
+      }
+      try {
+        const { data, error } = await supabaseClient.storage
+          .from(SUPABASE_CONFIG.bucket)
+          .createSignedUrl(path, 60);
+        if (error || !data || !data.signedUrl) throw error || new Error("تعذر إنشاء رابط التحميل");
+        window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+      } catch (err) {
+        recordErrorLog("downloadAttachment", err);
+        showToast("تعذر فتح أو تحميل الملف المرفق");
+      }
+    }
+
+    async function pushWorkerToCloud(worker) {
+      if (!isCloudConfigured() || !cloudUser) return;
+      if (navigator.onLine === false) {
+        enqueueOperation("upsertWorker", worker);
+        return;
+      }
+      const { error } = await supabaseClient.from("workers").upsert({
+        id: worker.id,
+        user_id: cloudUser.id,
+        name: worker.name,
+        phone: worker.phone,
+        gov: worker.gov,
+        area: worker.area,
+        specialties: worker.specialties,
+        doc_path: worker.docPath || null,
+        verified: Boolean(worker.verified),
+        active: Boolean(worker.active)
+      });
+      if (error) {
+        enqueueOperation("upsertWorker", worker);
+        throw error;
+      }
+    }
+
+    async function pushOrderToCloud(order) {
+      if (!isCloudConfigured() || !cloudUser) return;
+      if (navigator.onLine === false) {
+        enqueueOperation("upsertOrder", order);
+        return;
+      }
+      const { error } = await supabaseClient.from("orders").upsert({
+        id: order.id,
+        customer_id: order.customerId || cloudUser.id,
+        worker_user_id: order.workerUserId || null,
+        worker_id: order.workerId || null,
+        worker_name: order.workerName || null,
+        customer: order.customer,
+        phone: order.phone,
+        specialty: order.specialty,
+        gov: order.gov,
+        area: order.area,
+        scheduled_time: order.time,
+        price: Number(order.price),
+        payment_method: order.paymentMethod,
+        details: order.details,
+        attachment_path: order.attachmentPath || null,
+        status: order.status,
+        customer_confirmed: Boolean(order.customerConfirmed),
+        worker_confirmed: Boolean(order.workerConfirmed),
+        settled: Boolean(order.settled)
+      });
+      if (error) {
+        enqueueOperation("upsertOrder", order);
+        throw error;
+      }
+    }
+
+    async function flushPendingQueue() {
+      if (!isCloudConfigured() || !cloudUser || navigator.onLine === false || isSyncing) return;
+      if (!state.pendingQueue.length) return;
+
+      isSyncing = true;
+      const remaining = [];
+      for (const item of state.pendingQueue) {
+        try {
+          if (item.type === "upsertOrder") {
+            await pushOrderToCloud(item.payload);
+          } else if (item.type === "upsertWorker") {
+            await pushWorkerToCloud(item.payload);
+          } else if (item.type === "commissionRate" && state.role === "admin") {
+            const { error } = await supabaseClient
+              .from("app_settings")
+              .update({ commission_rate: item.payload.rate, updated_at: new Date().toISOString() })
+              .eq("id", 1);
+            if (error) throw error;
+          }
+        } catch (err) {
+          remaining.push(item);
+        }
+      }
+      state.pendingQueue = remaining;
+      saveState();
+      isSyncing = false;
+    }
+
+    async function syncCloudData(showFeedback = false) {
+      if (!isCloudConfigured()) {
+        if (showFeedback) showToast("أضف بيانات Supabase أولاً لتفعيل المزامنة السحابية");
+        return;
+      }
+      if (navigator.onLine === false) {
+        if (showFeedback) showToast("لا يوجد اتصال بالإنترنت حالياً");
+        return;
+      }
+
+      try {
+        await flushPendingQueue();
+
+        const [ordersRes, workersRes, settingsRes] = await Promise.all([
+          supabaseClient.from("orders").select("*").order("created_at", { ascending: false }),
+          supabaseClient.from("workers").select("*").order("created_at", { ascending: false }),
+          supabaseClient.from("app_settings").select("commission_rate").eq("id", 1).maybeSingle()
+        ]);
+
+        if (ordersRes.error) throw ordersRes.error;
+        if (workersRes.error) throw workersRes.error;
+
+        if (Array.isArray(workersRes.data) && workersRes.data.length) {
+          state.workers = workersRes.data.map(w => ({
+            id: w.id,
+            userId: w.user_id,
+            name: w.name,
+            phone: w.phone,
+            gov: w.gov,
+            area: w.area,
+            specialties: Array.isArray(w.specialties) ? w.specialties : [],
+            docPath: w.doc_path || "",
+            verified: Boolean(w.verified),
+            active: Boolean(w.active)
+          }));
+        }
+
+        if (Array.isArray(ordersRes.data) && ordersRes.data.length) {
+          state.orders = ordersRes.data.map(o => ({
+            id: o.id,
+            customerId: o.customer_id,
+            workerUserId: o.worker_user_id,
+            customer: o.customer,
+            phone: o.phone,
+            specialty: o.specialty,
+            gov: o.gov,
+            area: o.area,
+            time: o.scheduled_time,
+            price: Number(o.price),
+            paymentMethod: o.payment_method,
+            details: o.details,
+            attachmentPath: o.attachment_path || "",
+            status: o.status,
+            workerId: o.worker_id,
+            workerName: o.worker_name,
+            customerConfirmed: Boolean(o.customer_confirmed),
+            workerConfirmed: Boolean(o.worker_confirmed),
+            settled: Boolean(o.settled)
+          }));
+        }
+
+        if (settingsRes.data && Number.isFinite(Number(settingsRes.data.commission_rate))) {
+          state.commissionRate = Number(settingsRes.data.commission_rate);
+        }
+
+        saveState();
+        renderAll();
+        if (showFeedback) showToast("تمت مزامنة البيانات مع السحابة بنجاح");
+      } catch (err) {
+        recordErrorLog("syncCloudData", err);
+        if (showFeedback) showToast("تعذر إتمام المزامنة السحابية الآن");
+      }
+    }
+
+    async function initCloudAuth() {
+      const subEl = document.getElementById("cloudStatusSub");
+      if (!isCloudConfigured()) {
+        subEl.textContent = "وضع محلي (أضف بيانات Supabase للمزامنة السحابية)";
+        updateAuthUI();
+        return;
+      }
+
+      supabaseClient = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+      subEl.textContent = "متصل بـ Supabase";
+
+      const { data } = await supabaseClient.auth.getSession();
+      cloudUser = data && data.session ? data.session.user : null;
+      await syncProfileRole();
+      updateAuthUI();
+      if (cloudUser) await syncCloudData(false);
+
+      supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+        cloudUser = session ? session.user : null;
+        await syncProfileRole();
+        updateAuthUI();
+        if (cloudUser) await syncCloudData(false);
+      });
+    }
+
+    async function syncProfileRole() {
+      if (!supabaseClient || !cloudUser) return;
+      try {
+        const { data } = await supabaseClient
+          .from("profiles")
+          .select("role")
+          .eq("id", cloudUser.id)
+          .maybeSingle();
+        if (data && VALID_ROLES.includes(data.role)) {
+          state.role = data.role;
+          saveState();
+          updateRoleUI();
+        }
+      } catch (e) {
+        // يُبقي الدور المحلي عند تعذر القراءة
+      }
+    }
+
+    function updateAuthUI() {
+      const info = document.getElementById("authUserInfo");
+      const loggedOutBox = document.getElementById("authLoggedOutBox");
+      const loggedInBox = document.getElementById("authLoggedInBox");
+      updatePendingQueueUI();
+
+      if (!isCloudConfigured()) {
+        info.textContent = "لم يتم إدخال إعدادات Supabase بعد — يعمل التطبيق محلياً دون انقطاع.";
+        loggedOutBox.classList.remove("hidden");
+        loggedInBox.classList.add("hidden");
+        return;
+      }
+
+      if (cloudUser) {
+        info.textContent = `مسجّل الدخول: ${cloudUser.email || cloudUser.id}`;
+        loggedOutBox.classList.add("hidden");
+        loggedInBox.classList.remove("hidden");
+      } else {
+        info.textContent = "غير مسجّل دخول — سجّل الدخول لمزامنة بياناتك عبر الأجهزة وحماية الملفات.";
+        loggedOutBox.classList.remove("hidden");
+        loggedInBox.classList.add("hidden");
+      }
+    }
+
+    async function signInCloud() {
+      if (!isCloudConfigured()) {
+        showToast("أضف SUPABASE_URL و SUPABASE_ANON_KEY أولاً");
+        return;
+      }
+      const email = document.getElementById("authEmail").value.trim();
+      const password = document.getElementById("authPassword").value;
+      if (!email || password.length < 6) {
+        showToast("أدخل البريد الإلكتروني وكلمة مرور (6 أحرف فأكثر)");
+        return;
+      }
+      const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) {
+        recordErrorLog("signInCloud", error);
+        showToast("تعذر تسجيل الدخول، تحقق من البيانات");
+        return;
+      }
+      showToast("تم تسجيل الدخول السحابي بنجاح");
+    }
+
+    async function signUpCloud() {
+      if (!isCloudConfigured()) {
+        showToast("أضف SUPABASE_URL و SUPABASE_ANON_KEY أولاً");
+        return;
+      }
+      const email = document.getElementById("authEmail").value.trim();
+      const password = document.getElementById("authPassword").value;
+      if (!email || password.length < 6) {
+        showToast("أدخل البريد الإلكتروني وكلمة مرور (6 أحرف فأكثر)");
+        return;
+      }
+      const { data, error } = await supabaseClient.auth.signUp({ email, password });
+      if (error) {
+        recordErrorLog("signUpCloud", error);
+        showToast("تعذر إنشاء الحساب السحابي");
+        return;
+      }
+      if (data && data.user) {
+        await supabaseClient.from("profiles").upsert({
+          id: data.user.id,
+          full_name: email.split("@")[0],
+          role: state.role === "admin" ? "customer" : state.role
+        });
+      }
+      showToast("تم إنشاء الحساب؛ تحقق من بريدك إذا طُلب تأكيد الحساب");
+    }
+
+    async function signOutCloud() {
+      if (!supabaseClient) return;
+      await supabaseClient.auth.signOut();
+      showToast("تم تسجيل الخروج السحابي");
+    }
+
+    function populateSelects() {
+      const govOptions = GOVERNORATES.map(g => `<option value="${escapeHTML(g)}">${escapeHTML(g)}</option>`).join("");
+      document.getElementById("filterGov").insertAdjacentHTML("beforeend", govOptions);
+      document.getElementById("oGov").innerHTML = govOptions;
+      document.getElementById("wGov").innerHTML = govOptions;
+
+      document.getElementById("oSpecialty").innerHTML = SPECIALTIES
+        .map(s => `<option value="${escapeHTML(s.name)}">${escapeHTML(s.name)}</option>`)
+        .join("");
+
+      document.getElementById("wSpecialtiesCheckboxes").innerHTML = SPECIALTIES
+        .map(s => `
+          <label class="flex items-center gap-2 p-2 rounded-xl border border-slate-200 text-xs cursor-pointer hover:bg-teal-50">
+            <input type="checkbox" name="workerSpec" value="${escapeHTML(s.name)}" class="accent-teal-700" />
+            <span>${s.icon} ${escapeHTML(s.name)}</span>
+          </label>
+        `).join("");
+    }
+
+    function updateRoleUI() {
+      const labels = {
+        customer: "حساب: زبون",
+        worker: "حساب: عامل",
+        admin: "حساب: إدارة"
+      };
+      document.getElementById("roleBadge").textContent = labels[state.role] || "حساب: زبون";
+    }
+
     function switchTab(tab) {
-      ["home", "orders", "workers", "wallet", "account", "admin"].forEach(t => {
+      if (!VALID_TABS.includes(tab)) return;
+      if (tab === "admin" && state.role !== "admin") {
+        showToast("للوصول إلى لوحة الإدارة، بدّل الدور إلى (إدارة) من الأعلى");
+        return;
+      }
+      state.activeTab = tab;
+      saveState();
+
+      VALID_TABS.forEach(t => {
         document.getElementById(`view-${t}`).classList.toggle("hidden", t !== tab);
       });
       document.querySelectorAll(".tab-btn").forEach(btn => {
         btn.classList.toggle("active", btn.dataset.tab === tab);
       });
-      renderAll();
+
+      if (tab === "home") renderCategories();
+      if (tab === "orders") renderOrders();
+      if (tab === "workers") renderWorkers();
+      if (tab === "wallet" || tab === "admin") renderWalletAndAdmin();
+      if (tab === "account") updateAuthUI();
     }
 
     function switchRole() {
-      state.role = state.role === "customer" ? "worker" : "customer";
-      document.getElementById("roleBadge").textContent =
-        state.role === "customer" ? "حساب: زبون" : "حساب: عامل";
-      showToast(state.role === "customer" ? "تم التبديل إلى وضع الزبون" : "تم التبديل إلى وضع العامل");
-      renderOrders();
+      const next = VALID_ROLES[(VALID_ROLES.indexOf(state.role) + 1) % VALID_ROLES.length];
+      state.role = next;
+      saveState();
+      updateRoleUI();
+
+      const msgMap = {
+        customer: "تم التبديل إلى وضع الزبون",
+        worker: "تم التبديل إلى وضع العامل",
+        admin: "تم التبديل إلى وضع الإدارة"
+      };
+      showToast(msgMap[next]);
+
+      if (state.activeTab === "admin" && next !== "admin") {
+        switchTab("home");
+      } else if (state.activeTab === "orders") {
+        renderOrders();
+      } else if (state.activeTab === "admin") {
+        renderWalletAndAdmin();
+      }
     }
 
     function renderCategories() {
       const q = document.getElementById("searchSpecialty").value.trim();
       const gov = document.getElementById("filterGov").value;
       const grid = document.getElementById("categoriesGrid");
+      const hint = document.getElementById("govAvailabilityHint");
+
+      const activeWorkersInGov = gov
+        ? state.workers.filter(w => w.active && w.gov === gov)
+        : state.workers.filter(w => w.active);
+
+      if (gov) {
+        hint.classList.remove("hidden");
+        hint.textContent = `المحافظة المختارة: ${gov} — عدد العمال النشطين المسجلين فيها: ${activeWorkersInGov.length} عامل. عند الضغط على أي تخصص سيتم تحديد ${gov} تلقائياً.`;
+      } else {
+        hint.classList.add("hidden");
+      }
 
       const filtered = SPECIALTIES.filter(s => !q || s.name.includes(q) || s.desc.includes(q));
       document.getElementById("catCount").textContent = `${filtered.length} تخصص متاح`;
 
-      grid.innerHTML = filtered.map(s => `
-        <div onclick="openOrderModal('${s.name}', '${gov}')"
-          class="bg-white p-3.5 rounded-2xl border border-slate-100 hover:border-teal-500 shadow-xs hover:shadow-md transition cursor-pointer flex flex-col justify-between gap-2">
-          <div>
-            <div class="text-2xl mb-1.5">${s.icon}</div>
-            <h4 class="font-extrabold text-sm text-slate-900">${s.name}</h4>
-            <p class="text-[11px] text-slate-500 mt-0.5 leading-snug">${s.desc}</p>
-          </div>
-          <span class="text-[11px] font-bold text-teal-700">اطلب هذا العامل ←</span>
-        </div>
-      `).join("");
+      if (!filtered.length) {
+        grid.innerHTML = `<div class="col-span-full bg-white p-6 rounded-2xl text-center text-xs sm:text-sm text-slate-500 border border-slate-100">لا توجد تخصصات مطابقة لبحثك حالياً.</div>`;
+        return;
+      }
+
+      grid.innerHTML = filtered.map(s => {
+        const specWorkersCount = activeWorkersInGov.filter(w => w.specialties.includes(s.name)).length;
+        return `
+          <button type="button" onclick="openOrderModal('${escapeHTML(s.name)}', '${escapeHTML(gov)}')"
+            class="text-right bg-white p-3.5 rounded-2xl border border-slate-100 hover:border-teal-500 shadow-xs hover:shadow-md transition cursor-pointer flex flex-col justify-between gap-2">
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="text-2xl">${s.icon}</span>
+                <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-bold">
+                  ${specWorkersCount} عامل
+                </span>
+              </div>
+              <h4 class="font-extrabold text-sm text-slate-900">${escapeHTML(s.name)}</h4>
+              <p class="text-[11px] text-slate-500 mt-0.5 leading-snug">${escapeHTML(s.desc)}</p>
+            </div>
+            <span class="text-[11px] font-bold text-teal-700">اطلب هذا العامل ←</span>
+          </button>
+        `;
+      }).join("");
     }
 
     function openOrderModal(specialtyName = "", govName = "") {
       if (specialtyName) document.getElementById("oSpecialty").value = specialtyName;
       if (govName) document.getElementById("oGov").value = govName;
+
+      const timeInput = document.getElementById("oTime");
+      if (!timeInput.value) {
+        const soon = new Date(Date.now() + 2 * 60 * 60 * 1000);
+        const tzOffset = soon.getTimezoneOffset() * 60000;
+        timeInput.value = new Date(soon - tzOffset).toISOString().slice(0, 16);
+      }
+
       document.getElementById("orderModal").classList.remove("hidden");
+      document.getElementById("oCustomer").focus();
     }
 
     function closeOrderModal() {
       document.getElementById("orderModal").classList.add("hidden");
     }
 
-    function submitOrder(e) {
+    async function submitOrder(e) {
       e.preventDefault();
-      const order = {
-        id: "ORD-" + Math.floor(100 + Math.random() * 900),
-        customer: document.getElementById("oCustomer").value.trim(),
-        phone: document.getElementById("oPhone").value.trim(),
-        specialty: document.getElementById("oSpecialty").value,
-        gov: document.getElementById("oGov").value,
-        area: document.getElementById("oArea").value.trim(),
-        time: document.getElementById("oTime").value,
-        price: Number(document.getElementById("oPrice").value),
-        paymentMethod: document.getElementById("oPaymentMethod").value,
-        details: document.getElementById("oDetails").value.trim(),
-        status: "بانتظار عامل",
-        workerId: null,
-        workerName: null,
-        customerConfirmed: false,
-        workerConfirmed: false,
-        settled: false
-      };
+      try {
+        const customer = document.getElementById("oCustomer").value.trim();
+        const phone = document.getElementById("oPhone").value.trim();
+        const area = document.getElementById("oArea").value.trim();
+        const details = document.getElementById("oDetails").value.trim();
+        const price = Number(document.getElementById("oPrice").value);
+        const fileInput = document.getElementById("oAttachment");
+        const fileCheck = validateAttachmentFile(fileInput.files && fileInput.files[0]);
 
-      state.orders.unshift(order);
-      closeOrderModal();
-      e.target.reset();
-      showToast("تم نشر الطلب وتحويلك إلى خانة الطلبات");
-      switchTab("orders");
+        if (customer.length < 3 || area.length < 2 || details.length < 5) {
+          showToast("يرجى ملء جميع الحقول النصية ببيانات واضحة");
+          return;
+        }
+        if (!IRAQI_PHONE_REGEX.test(phone)) {
+          showToast("يرجى إدخال رقم هاتف عراقي صحيح (11 رقماً يبدأ بـ 07)");
+          return;
+        }
+        if (!Number.isFinite(price) || price < 5000 || price > 10000000) {
+          showToast("يرجى إدخال أجر صحيح بين 5,000 و 10,000,000 د.ع");
+          return;
+        }
+        if (!fileCheck.ok) {
+          showToast(fileCheck.error);
+          return;
+        }
+
+        const attachmentPath = fileCheck.file ? await uploadAttachmentToCloud(fileCheck.file, "orders") : "";
+
+        const order = {
+          id: generateUniqueOrderId(),
+          customerId: cloudUser ? cloudUser.id : null,
+          workerUserId: null,
+          customer,
+          phone,
+          specialty: document.getElementById("oSpecialty").value,
+          gov: document.getElementById("oGov").value,
+          area,
+          time: document.getElementById("oTime").value,
+          price,
+          paymentMethod: document.getElementById("oPaymentMethod").value,
+          details,
+          attachmentPath,
+          status: "بانتظار عامل",
+          workerId: null,
+          workerName: null,
+          customerConfirmed: false,
+          workerConfirmed: false,
+          settled: false
+        };
+
+        state.orders.unshift(order);
+        saveState();
+        closeOrderModal();
+        e.target.reset();
+        showToast("تم نشر الطلب وحفظه بنجاح");
+        switchTab("orders");
+
+        if (isCloudConfigured() && cloudUser) {
+          await pushOrderToCloud(order).catch(err => {
+            recordErrorLog("pushOrderToCloud", err);
+            showToast("تم حفظ الطلب محلياً وسيُزامن عند توفر الاتصال");
+          });
+        }
+      } catch (err) {
+        recordErrorLog("submitOrder", err);
+        showToast("حدث خطأ أثناء نشر الطلب");
+      }
     }
 
-    function acceptOrder(orderId) {
+    async function acceptOrder(orderId) {
+      if (state.role !== "worker") {
+        showToast("يجب التبديل إلى حساب (عامل) لقبول الطلبات");
+        return;
+      }
       const worker = state.workers.find(w => w.id === state.activeWorkerId && w.active);
       if (!worker) {
-        showToast("يرجى تفعيل حساب عامل أولاً");
+        showToast("يرجى تفعيل حساب عامل نشط أولاً من تبويب العمال");
         return;
       }
       const order = state.orders.find(o => o.id === orderId);
-      if (!order) return;
-
-      if (order.workerId && order.workerId !== worker.id) {
-        showToast("عذراً، تم قبول هذا الطلب من عامل آخر");
+      if (!order || order.status !== "بانتظار عامل") {
+        showToast("هذا الطلب لم يعد متاحاً للقبول");
         return;
       }
-
       if (!worker.specialties.includes(order.specialty)) {
-        showToast("هذا الطلب لا يطابق اختصاصات العامل الحالية");
+        showToast(`اختصاصات ${worker.name} لا تشمل (${order.specialty})`);
         return;
       }
 
       order.workerId = worker.id;
       order.workerName = worker.name;
+      order.workerUserId = cloudUser ? cloudUser.id : (worker.userId || null);
       order.status = "مقبول";
+      saveState();
       showToast(`تم قبول الطلب بواسطة ${worker.name}`);
       renderOrders();
-    }
 
-    function startWork(orderId) {
-      const order = state.orders.find(o => o.id === orderId);
-      if (order && order.status === "مقبول") {
-        order.status = "قيد التنفيذ";
-        renderOrders();
+      if (isCloudConfigured() && cloudUser) {
+        await pushOrderToCloud(order).catch(err => recordErrorLog("acceptOrder.sync", err));
       }
     }
 
-    function confirmCompletion(orderId, side) {
+    async function startWork(orderId) {
+      if (state.role !== "worker") {
+        showToast("العامل فقط يمكنه بدء تنفيذ الطلب");
+        return;
+      }
+      const order = state.orders.find(o => o.id === orderId);
+      if (!order || order.status !== "مقبول") {
+        showToast("لا يمكن بدء التنفيذ في هذه الحالة");
+        return;
+      }
+      order.status = "قيد التنفيذ";
+      saveState();
+      showToast("تم تحديث حالة الطلب إلى: قيد التنفيذ");
+      renderOrders();
+
+      if (isCloudConfigured() && cloudUser) {
+        await pushOrderToCloud(order).catch(err => recordErrorLog("startWork.sync", err));
+      }
+    }
+
+    async function confirmCompletion(orderId, side) {
+      if (state.role !== side) {
+        showToast(side === "customer" ? "هذا الإجراء مخصص للزبون فقط" : "هذا الإجراء مخصص للعامل فقط");
+        return;
+      }
+
       const order = state.orders.find(o => o.id === orderId);
       if (!order) return;
 
-      if (side === "customer") order.customerConfirmed = true;
-      if (side === "worker") order.workerConfirmed = true;
+      if (!["قيد التنفيذ", "بانتظار التأكيد"].includes(order.status)) {
+        showToast("لا يمكن تأكيد الإنجاز إلا بعد بدء تنفيذ العمل");
+        return;
+      }
+
+      if (side === "customer") {
+        if (order.customerConfirmed) {
+          showToast("تم تسجيل تأكيد الزبون مسبقاً");
+          return;
+        }
+        order.customerConfirmed = true;
+      }
+
+      if (side === "worker") {
+        if (order.workerConfirmed) {
+          showToast("تم تسجيل تأكيد العامل مسبقاً");
+          return;
+        }
+        order.workerConfirmed = true;
+      }
 
       if (order.customerConfirmed && order.workerConfirmed) {
         order.status = "مدفوع";
@@ -567,23 +1316,75 @@
         order.status = "بانتظار التأكيد";
         showToast("تم تسجيل تأكيدك، بانتظار تأكيد الطرف الآخر");
       }
-      renderAll();
-    }
 
-    function cancelOrder(orderId) {
-      const order = state.orders.find(o => o.id === orderId);
-      if (order && !order.settled) {
-        order.status = "ملغي";
-        renderAll();
+      saveState();
+      renderOrders();
+      renderWalletAndAdmin();
+
+      if (isCloudConfigured() && cloudUser) {
+        await pushOrderToCloud(order).catch(err => recordErrorLog("confirmCompletion.sync", err));
       }
     }
 
-    function openDispute(orderId) {
+    async function cancelOrder(orderId) {
       const order = state.orders.find(o => o.id === orderId);
-      if (order) {
-        order.status = "نزاع";
-        showToast("تم فتح نزاع وإرساله إلى الإدارة");
-        renderAll();
+      if (!order) return;
+      if (order.settled || order.status === "مدفوع" || order.status === "ملغي") {
+        showToast("لا يمكن إلغاء هذا الطلب في حالته الحالية");
+        return;
+      }
+      order.status = "ملغي";
+      saveState();
+      showToast("تم إلغاء الطلب");
+      renderOrders();
+      renderWalletAndAdmin();
+
+      if (isCloudConfigured() && cloudUser) {
+        await pushOrderToCloud(order).catch(err => recordErrorLog("cancelOrder.sync", err));
+      }
+    }
+
+    async function openDispute(orderId) {
+      const order = state.orders.find(o => o.id === orderId);
+      if (!order || !["مقبول", "قيد التنفيذ", "بانتظار التأكيد"].includes(order.status)) {
+        showToast("لا يمكن فتح نزاع على هذا الطلب حالياً");
+        return;
+      }
+      order.status = "نزاع";
+      saveState();
+      showToast("تم فتح نزاع وإرساله إلى الإدارة");
+      renderOrders();
+      renderWalletAndAdmin();
+
+      if (isCloudConfigured() && cloudUser) {
+        await pushOrderToCloud(order).catch(err => recordErrorLog("openDispute.sync", err));
+      }
+    }
+
+    async function resolveDispute(orderId, resolution) {
+      if (state.role !== "admin") {
+        showToast("هذا الإجراء مخصص للإدارة فقط");
+        return;
+      }
+      const order = state.orders.find(o => o.id === orderId);
+      if (!order || order.status !== "نزاع") return;
+
+      if (resolution === "pay") {
+        order.customerConfirmed = true;
+        order.workerConfirmed = true;
+        order.status = "مدفوع";
+        order.settled = true;
+        showToast("تمت تسوية النزاع لصالح إتمام الدفع");
+      } else {
+        order.status = "ملغي";
+        showToast("تم إغلاق النزاع وإلغاء الطلب");
+      }
+      saveState();
+      renderOrders();
+      renderWalletAndAdmin();
+
+      if (isCloudConfigured() && cloudUser) {
+        await pushOrderToCloud(order).catch(err => recordErrorLog("resolveDispute.sync", err));
       }
     }
 
@@ -591,19 +1392,20 @@
       const statuses = ["الكل", "بانتظار عامل", "مقبول", "قيد التنفيذ", "بانتظار التأكيد", "مدفوع", "ملغي", "نزاع"];
       const container = document.getElementById("statusFilters");
       container.innerHTML = statuses.map(st => `
-        <button onclick="setStatusFilter('${st}')"
+        <button type="button" onclick="setStatusFilter('${escapeHTML(st)}')"
           class="px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap cursor-pointer transition ${
             state.selectedStatus === st
               ? "bg-teal-800 text-white"
               : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
           }">
-          ${st}
+          ${escapeHTML(st)}
         </button>
       `).join("");
     }
 
     function setStatusFilter(st) {
       state.selectedStatus = st;
+      saveState();
       renderOrders();
     }
 
@@ -621,25 +1423,35 @@
         <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs space-y-3">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <span class="text-xs font-extrabold text-teal-800">#${o.id}</span>
-              <span class="font-extrabold text-sm sm:text-base text-slate-900 mr-1">${o.specialty}</span>
-              <span class="text-xs text-slate-500">• ${o.gov} - ${o.area}</span>
+              <span class="text-xs font-extrabold text-teal-800">#${escapeHTML(o.id)}</span>
+              <span class="font-extrabold text-sm sm:text-base text-slate-900 mr-1">${escapeHTML(o.specialty)}</span>
+              <span class="text-xs text-slate-500">• ${escapeHTML(o.gov)} - ${escapeHTML(o.area)}</span>
             </div>
-            <span class="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-900">${o.status}</span>
+            <span class="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-900">${escapeHTML(o.status)}</span>
           </div>
 
-          <p class="text-xs sm:text-sm text-slate-600">${o.details}</p>
+          <p class="text-xs sm:text-sm text-slate-600">${escapeHTML(o.details)}</p>
 
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs bg-slate-50 p-3 rounded-xl">
-            <div><b>الزبون:</b> ${o.customer} (${o.phone})</div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs bg-slate-50 p-3 rounded-xl">
+            <div><b>الزبون:</b> ${escapeHTML(o.customer)} (${escapeHTML(o.phone)})</div>
+            <div><b>الموعد:</b> ${formatDateTime(o.time)}</div>
             <div><b>الأجر:</b> ${formatIQD(o.price)}</div>
-            <div><b>الدفع:</b> ${o.paymentMethod}</div>
+            <div><b>الدفع:</b> ${escapeHTML(o.paymentMethod)}</div>
           </div>
+
+          ${o.attachmentPath ? `
+            <div class="text-xs">
+              <button type="button" onclick="downloadAttachment('${escapeHTML(o.attachmentPath)}')"
+                class="text-teal-700 font-bold hover:underline cursor-pointer">
+                📎 عرض / تحميل الملف المرفق
+              </button>
+            </div>
+          ` : ""}
 
           <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
             <div>
               <b>العامل المرتبط:</b>
-              ${o.workerName ? `<span class="text-teal-700 font-bold">${o.workerName}</span>` : `<span class="text-slate-400">لم يُعيّن بعد</span>`}
+              ${o.workerName ? `<span class="text-teal-700 font-bold">${escapeHTML(o.workerName)}</span>` : `<span class="text-slate-400">لم يُعيّن بعد</span>`}
               <span class="mx-2 text-slate-300">|</span>
               <span>تأكيد الزبون: ${o.customerConfirmed ? "✅" : "⏳"}</span>
               <span class="mx-1">•</span>
@@ -647,32 +1459,47 @@
             </div>
 
             <div class="flex flex-wrap gap-2">
-              ${!o.workerId && o.status === "بانتظار عامل" ? `
-                <button onclick="acceptOrder('${o.id}')" class="bg-teal-700 hover:bg-teal-600 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
+              ${state.role === "worker" && !o.workerId && o.status === "بانتظار عامل" ? `
+                <button type="button" onclick="acceptOrder('${escapeHTML(o.id)}')" class="bg-teal-700 hover:bg-teal-600 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
                   قبول الطلب
                 </button>
               ` : ""}
 
-              ${o.status === "مقبول" ? `
-                <button onclick="startWork('${o.id}')" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
+              ${state.role === "worker" && o.status === "مقبول" ? `
+                <button type="button" onclick="startWork('${escapeHTML(o.id)}')" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
                   بدء التنفيذ
                 </button>
               ` : ""}
 
+              ${state.role === "customer" && ["قيد التنفيذ", "بانتظار التأكيد"].includes(o.status) && !o.customerConfirmed ? `
+                <button type="button" onclick="confirmCompletion('${escapeHTML(o.id)}', 'customer')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
+                  تأكيد الإنجاز (الزبون)
+                </button>
+              ` : ""}
+
+              ${state.role === "worker" && ["قيد التنفيذ", "بانتظار التأكيد"].includes(o.status) && !o.workerConfirmed ? `
+                <button type="button" onclick="confirmCompletion('${escapeHTML(o.id)}', 'worker')" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
+                  تأكيد الإنجاز (العامل)
+                </button>
+              ` : ""}
+
               ${["مقبول", "قيد التنفيذ", "بانتظار التأكيد"].includes(o.status) ? `
-                <button onclick="confirmCompletion('${o.id}', 'customer')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
-                  تأكيد الزبون
-                </button>
-                <button onclick="confirmCompletion('${o.id}', 'worker')" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
-                  تأكيد العامل
-                </button>
-                <button onclick="openDispute('${o.id}')" class="bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold px-3 py-1.5 rounded-lg cursor-pointer">
+                <button type="button" onclick="openDispute('${escapeHTML(o.id)}')" class="bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold px-3 py-1.5 rounded-lg cursor-pointer">
                   نزاع
                 </button>
               ` : ""}
 
-              ${!o.settled && o.status !== "ملغي" ? `
-                <button onclick="cancelOrder('${o.id}')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-1.5 rounded-lg cursor-pointer">
+              ${state.role === "admin" && o.status === "نزاع" ? `
+                <button type="button" onclick="resolveDispute('${escapeHTML(o.id)}', 'pay')" class="bg-emerald-700 hover:bg-emerald-600 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
+                  حسم النزاع ودفع
+                </button>
+                <button type="button" onclick="resolveDispute('${escapeHTML(o.id)}', 'cancel')" class="bg-rose-700 hover:bg-rose-600 text-white font-bold px-3 py-1.5 rounded-lg cursor-pointer">
+                  إلغاء الطلب
+                </button>
+              ` : ""}
+
+              ${!o.settled && o.status !== "ملغي" && o.status !== "مدفوع" ? `
+                <button type="button" onclick="cancelOrder('${escapeHTML(o.id)}')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-1.5 rounded-lg cursor-pointer">
                   إلغاء
                 </button>
               ` : ""}
@@ -682,66 +1509,160 @@
       `).join("");
     }
 
-    function registerWorker(e) {
+    async function registerWorker(e) {
       e.preventDefault();
-      const selectedSpecs = Array.from(document.querySelectorAll('input[name="workerSpec"]:checked')).map(cb => cb.value);
-      if (!selectedSpecs.length) {
-        showToast("يرجى اختيار اختصاص واحد على الأقل");
-        return;
+      try {
+        const name = document.getElementById("wName").value.trim();
+        const phone = document.getElementById("wPhone").value.trim();
+        const area = document.getElementById("wArea").value.trim();
+        const selectedSpecs = Array.from(document.querySelectorAll('input[name="workerSpec"]:checked')).map(cb => cb.value);
+        const docInput = document.getElementById("wDocFile");
+        const docCheck = validateAttachmentFile(docInput.files && docInput.files[0]);
+
+        if (name.length < 3 || area.length < 2) {
+          showToast("يرجى إدخال اسم العامل والمنطقة بشكل صحيح");
+          return;
+        }
+        if (!IRAQI_PHONE_REGEX.test(phone)) {
+          showToast("يرجى إدخال رقم هاتف عراقي صحيح (11 رقماً يبدأ بـ 07)");
+          return;
+        }
+        if (!selectedSpecs.length) {
+          showToast("يرجى اختيار اختصاص واحد على الأقل");
+          return;
+        }
+        if (!docCheck.ok) {
+          showToast(docCheck.error);
+          return;
+        }
+
+        const docPath = docCheck.file ? await uploadAttachmentToCloud(docCheck.file, "workers") : "";
+
+        const newWorker = {
+          id: "w" + Date.now(),
+          userId: cloudUser ? cloudUser.id : null,
+          name,
+          phone,
+          gov: document.getElementById("wGov").value,
+          area,
+          specialties: selectedSpecs,
+          docPath,
+          verified: true,
+          active: true
+        };
+
+        state.workers.unshift(newWorker);
+        state.activeWorkerId = newWorker.id;
+        saveState();
+        e.target.reset();
+        showToast("تم تسجيل العامل وحفظه في السجل");
+        switchTab("workers");
+
+        if (isCloudConfigured() && cloudUser) {
+          await pushWorkerToCloud(newWorker).catch(err => {
+            recordErrorLog("pushWorkerToCloud", err);
+            showToast("تم حفظ العامل محلياً وسيُزامن عند توفر الاتصال");
+          });
+        }
+      } catch (err) {
+        recordErrorLog("registerWorker", err);
+        showToast("حدث خطأ أثناء تسجيل حساب العامل");
       }
-
-      const newWorker = {
-        id: "w" + Date.now(),
-        name: document.getElementById("wName").value.trim(),
-        phone: document.getElementById("wPhone").value.trim(),
-        gov: document.getElementById("wGov").value,
-        area: document.getElementById("wArea").value.trim(),
-        specialties: selectedSpecs,
-        verified: true,
-        active: true
-      };
-
-      state.workers.unshift(newWorker);
-      state.activeWorkerId = newWorker.id;
-      e.target.reset();
-      showToast("تم تسجيل العامل وإضافته إلى السجل");
-      switchTab("workers");
     }
 
-    function toggleWorkerActive(id) {
+    function setActiveWorker(id) {
+      state.activeWorkerId = id;
+      saveState();
+      const w = state.workers.find(x => x.id === id);
+      if (w) showToast(`تم اختيار ${w.name} كعامل نشط`);
+      renderWorkers();
+    }
+
+    async function toggleWorkerActive(id) {
       const w = state.workers.find(x => x.id === id);
       if (w) {
         w.active = !w.active;
-        renderAll();
+        saveState();
+        renderWorkers();
+        renderCategories();
+        if (isCloudConfigured() && cloudUser) {
+          await pushWorkerToCloud(w).catch(err => recordErrorLog("toggleWorkerActive.sync", err));
+        }
       }
     }
 
     function renderWorkers() {
       const list = document.getElementById("workersList");
-      list.innerHTML = state.workers.map(w => `
-        <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs space-y-2.5">
-          <div class="flex items-center justify-between">
-            <div>
-              <h4 class="font-extrabold text-sm text-slate-900">${w.name} ${w.verified ? '<span class="text-teal-600 text-xs">✔ موثق</span>' : ''}</h4>
-              <p class="text-xs text-slate-500">${w.gov} - ${w.area} • ${w.phone}</p>
+      if (!state.workers.length) {
+        list.innerHTML = `<div class="col-span-full bg-white p-8 rounded-2xl text-center text-sm text-slate-500 border border-slate-100">لا يوجد عمال مسجلون حالياً.</div>`;
+        return;
+      }
+
+      list.innerHTML = state.workers.map(w => {
+        const isSelected = state.activeWorkerId === w.id;
+        return `
+          <div class="bg-white p-4 rounded-2xl border ${isSelected ? 'border-teal-500 ring-1 ring-teal-500/30' : 'border-slate-100'} shadow-xs space-y-2.5">
+            <div class="flex items-center justify-between">
+              <div>
+                <h4 class="font-extrabold text-sm text-slate-900">
+                  ${escapeHTML(w.name)}
+                  ${w.verified ? '<span class="text-teal-600 text-xs">✔ موثق</span>' : ''}
+                  ${isSelected ? '<span class="text-[10px] bg-teal-100 text-teal-800 px-2 py-0.5 rounded-full mr-1">النشط حالياً</span>' : ''}
+                </h4>
+                <p class="text-xs text-slate-500">${escapeHTML(w.gov)} - ${escapeHTML(w.area)} • ${escapeHTML(w.phone)}</p>
+              </div>
+              <span class="text-xs font-bold px-2.5 py-1 rounded-full ${w.active ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">
+                ${w.active ? "نشط" : "موقوف"}
+              </span>
             </div>
-            <span class="text-xs font-bold px-2.5 py-1 rounded-full ${w.active ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">
-              ${w.active ? "نشط" : "موقوف"}
-            </span>
+            <div class="flex flex-wrap gap-1.5">
+              ${w.specialties.map(sp => `<span class="text-[11px] bg-teal-50 text-teal-800 px-2.5 py-1 rounded-lg font-semibold">${escapeHTML(sp)}</span>`).join("")}
+            </div>
+            ${w.docPath ? `
+              <div class="text-xs">
+                <button type="button" onclick="downloadAttachment('${escapeHTML(w.docPath)}')"
+                  class="text-teal-700 font-bold hover:underline cursor-pointer">
+                  📄 عرض وثيقة العامل
+                </button>
+              </div>
+            ` : ""}
+            <div class="pt-1 flex items-center justify-between text-xs">
+              <button type="button" onclick="setActiveWorker('${escapeHTML(w.id)}')" class="text-teal-700 font-bold hover:underline cursor-pointer">
+                ${isSelected ? "العامل المختار للتنفيذ" : "تعيين كعامل نشط"}
+              </button>
+              <button type="button" onclick="toggleWorkerActive('${escapeHTML(w.id)}')" class="text-slate-600 font-bold hover:underline cursor-pointer">
+                ${w.active ? "إيقاف الحساب" : "تفعيل الحساب"}
+              </button>
+            </div>
           </div>
-          <div class="flex flex-wrap gap-1.5">
-            ${w.specialties.map(sp => `<span class="text-[11px] bg-teal-50 text-teal-800 px-2.5 py-1 rounded-lg font-semibold">${sp}</span>`).join("")}
-          </div>
-          <div class="pt-1 flex items-center justify-between text-xs">
-            <button onclick="state.activeWorkerId='${w.id}'; showToast('تم اختيار ${w.name} كعامل نشط للتجربة')" class="text-teal-700 font-bold hover:underline cursor-pointer">
-              تعيين كعامل نشط للتجربة
-            </button>
-            <button onclick="toggleWorkerActive('${w.id}')" class="text-slate-600 font-bold hover:underline cursor-pointer">
-              ${w.active ? "إيقاف الحساب" : "تفعيل الحساب"}
-            </button>
-          </div>
+        `;
+      }).join("");
+    }
+
+    function renderErrorLogs() {
+      const box = document.getElementById("errorLogsList");
+      if (!box) return;
+      if (!state.errorLogs.length) {
+        box.innerHTML = `<p class="text-slate-400">لا توجد أخطاء مسجلة حالياً.</p>`;
+        return;
+      }
+      box.innerHTML = state.errorLogs.map(log => `
+        <div class="bg-slate-50 px-3 py-2 rounded-xl flex items-center justify-between gap-2">
+          <span class="text-slate-700 font-semibold">[${escapeHTML(log.context)}] ${escapeHTML(log.message)}</span>
+          <span class="text-[10px] text-slate-400 shrink-0">${formatDateTime(log.time)}</span>
         </div>
       `).join("");
+    }
+
+    function clearErrorLogs() {
+      if (state.role !== "admin") {
+        showToast("مسح السجل مخصص للإدارة فقط");
+        return;
+      }
+      state.errorLogs = [];
+      saveState();
+      renderErrorLogs();
+      showToast("تم مسح سجل الأخطاء");
     }
 
     function renderWalletAndAdmin() {
@@ -753,6 +1674,7 @@
       document.getElementById("walletWorkerTotal").textContent = formatIQD(workerNet);
       document.getElementById("walletCommissionTotal").textContent = formatIQD(commission);
       document.getElementById("walletPaidCount").textContent = `${paidOrders.length} طلب`;
+      document.getElementById("commissionRateInput").value = state.commissionRate;
 
       document.getElementById("adminSummary").innerHTML = `
         <div class="bg-slate-50 p-3 rounded-xl">
@@ -772,14 +1694,95 @@
           <div class="text-lg font-extrabold text-amber-700 mt-1">${formatIQD(commission)}</div>
         </div>
       `;
+
+      renderErrorLogs();
     }
 
-    function updateCommissionRate(val) {
+    async function updateCommissionRate(val) {
+      if (state.role !== "admin") {
+        showToast("تعديل نسبة العمولة مخصص للإدارة فقط");
+        document.getElementById("commissionRateInput").value = state.commissionRate;
+        return;
+      }
       const num = Math.max(0, Math.min(50, Number(val) || 0));
       state.commissionRate = num;
+      saveState();
       document.getElementById("commissionRateInput").value = num;
       showToast(`تم تحديث نسبة العمولة إلى ${num}%`);
       renderWalletAndAdmin();
+
+      if (isCloudConfigured() && cloudUser) {
+        if (navigator.onLine === false) {
+          enqueueOperation("commissionRate", { id: "settings", rate: num });
+          return;
+        }
+        const { error } = await supabaseClient
+          .from("app_settings")
+          .update({ commission_rate: num, updated_at: new Date().toISOString() })
+          .eq("id", 1);
+        if (error) recordErrorLog("updateCommissionRate.sync", error);
+      }
+    }
+
+    function exportBackupJSON() {
+      if (state.role !== "admin") {
+        showToast("تصدير النسخة الاحتياطية مخصص للإدارة فقط");
+        return;
+      }
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `iraq-workers-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("تم تصدير النسخة الاحتياطية بنجاح");
+    }
+
+    function importBackupJSON(event) {
+      if (state.role !== "admin") {
+        showToast("استيراد النسخة الاحتياطية مخصص للإدارة فقط");
+        event.target.value = "";
+        return;
+      }
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const parsed = JSON.parse(String(reader.result || ""));
+          if (!Array.isArray(parsed.orders) || !Array.isArray(parsed.workers)) {
+            showToast("ملف النسخة الاحتياطية غير مطابق لبنية التطبيق");
+            return;
+          }
+          state = normalizeState(parsed);
+          saveState();
+          updateRoleUI();
+          renderAll();
+          switchTab(state.activeTab || "admin");
+          showToast("تمت استعادة النسخة الاحتياطية بنجاح");
+        } catch (err) {
+          recordErrorLog("importBackupJSON", err);
+          showToast("تعذر قراءة ملف النسخة الاحتياطية");
+        } finally {
+          event.target.value = "";
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function resetDemoData() {
+      if (state.role !== "admin") {
+        showToast("إعادة الضبط مخصصة للإدارة فقط");
+        return;
+      }
+      state = getDefaultState();
+      saveState();
+      updateRoleUI();
+      renderAll();
+      switchTab("home");
+      showToast("تمت إعادة ضبط البيانات التجريبية بنجاح");
     }
 
     function renderAll() {
@@ -787,10 +1790,46 @@
       renderOrders();
       renderWorkers();
       renderWalletAndAdmin();
+      updateAuthUI();
     }
 
+    function syncNetworkStatus() {
+      const banner = document.getElementById("networkBanner");
+      if (!banner) return;
+      banner.classList.toggle("hidden", navigator.onLine !== false);
+    }
+
+    window.addEventListener("online", async () => {
+      syncNetworkStatus();
+      showToast("عاد الاتصال بالإنترنت — جاري مزامنة العمليات المعلقة");
+      await flushPendingQueue();
+      await syncCloudData(false);
+    });
+
+    window.addEventListener("offline", () => {
+      syncNetworkStatus();
+      showToast("انقطع الاتصال بالإنترنت — العمل مستمر محلياً");
+    });
+
+    window.addEventListener("error", (ev) => {
+      recordErrorLog("window.error", ev.error || ev.message);
+    });
+    window.addEventListener("unhandledrejection", (ev) => {
+      recordErrorLog("promise.rejection", ev.reason);
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !document.getElementById("orderModal").classList.contains("hidden")) {
+        closeOrderModal();
+      }
+    });
+
     populateSelects();
+    updateRoleUI();
+    syncNetworkStatus();
     renderAll();
+    switchTab(state.activeTab || "home");
+    initCloudAuth();
   </script>
 </body>
 </html>
